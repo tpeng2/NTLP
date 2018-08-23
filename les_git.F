@@ -2,15 +2,15 @@ c     ----------------------------------------------------------------------
       module pars
 c     ----------------------------------------------------------------------
       integer, parameter :: 
-     +     iti=0245000,itmax=0250000, imean=00100, ihst=010,itape=05000,
-     +     itstr=0244999, it_his=0244999, it_viz=0244999, i_viz=005000   !change u.le if iti >0
+     +     iti,itmax, imean, ihst,itape,
+     +     itstr, it_his, it_viz, i_viz   !change u.le if iti >0
       integer, parameter ::
-     +     noalis=1, ismlt=0, ifree=0, isfc=1, iradup=0,
-     +     iupwnd=0, ibuoy=0, ifilt=0, itcut=1, isubs=0, ibrcl=0,
-     +     iocean=0, method=3, idebug=1, iz_space=1,
-     +     ivis0=0, ifix_dt = 0, new_vis=-1,
-     +     ispray=1,icouple=0,iTcouple=1, 
-     +     iHcouple=1,ievap=1 !iHcouple also controls TEcouple
+     +     noalis, ismlt, ifree, isfc, iradup,
+     +     iupwnd, ibuoy, ifilt, itcut, isubs, ibrcl,
+     +     iocean, method, idebug, iz_space,
+     +     ivis0, ifix_dt, new_vis,
+     +     ispray,icouple,iTcouple, 
+     +     iHcouple,ievap !iHcouple also controls TEcouple
 
 ! Set the scalar boundary condition based on isfc
 c            isfc = 0, specified surface heat flux (through wtsfc)
@@ -34,6 +34,9 @@ c
      +     maxnz2 = maxnz + 2,
      +     maxnx2 = maxnx + 2,
      +     maxny2 = maxny + 2
+c     ------------ Boundary Conditions moved from con_d for params.in
+      real :: zo,grav,fcor,zi,t00,vgcont,ugcont,dtdzf(nscl)
+      real :: xl,yl,zl,tsfcc(nscl),qstar(nscl),Uo,Ttop(nscl),Tbot(nscl)
 c     ----------------------------------------------------------------------
       integer ::    nnx, nny, nnz, nxy, ncx, nnxp1, nnyp1, ncy,
      +     nnxp2, nnyp2, nnzp1, ivis, nnzm1, isize, krec,
@@ -79,11 +82,11 @@ c     ----------------------------------------------------------------------
      +     ucfl, vcfl, wcfl
 c     ----------------------------------------------------------------------
       character*80  path_res, path_sav, path_his, path_prt,
-     +     path_hp, path_sav_hp, path_part,
+     +     path_hp, path_sav_hp, path_part,path_ran,
      +     path_v, path_c, path_p, path_h,
      +     path_sav_v, path_sav_c, 
      +     path_sav_p, path_sav_h, path_sav_part,
-     +     path_histog, path_sav_hist,
+     +     path_hist, path_sav_hist,
      +     bad_news
       character case_inp*3
       character*80 path_viz_xy, path_viz_xz, path_viz_yz, path_stuf,
@@ -250,68 +253,64 @@ c     ----------------------------------------------------------------------
       use pars, only : nscl
       type con_d
       sequence
-      real ::  zo, vk, vkin, vk74, vk74in, 
-     +     grav, gcp, fcor, fcor_h, zi, pi2,
-     +     batagk, t00, batag, vgcont, ugcont, 
-     +     cdbtm, dtdzf(nscl), dtjump, ugal, divgls,
-     +     z1, utausv, xl, yl, zl, dx, dy, dz, dt, 
+      real ::  vk, vkin, vk74, vk74in,
+     +     gcp, fcor_h, pi2,
+     +     batagk, batag,
+     +     cdbtm, dtjump, ugal, divgls,
+     +     z1, utausv, dx, dy, dz, dt,
      +     fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax,
-     +     time, zody, zody74, tsfcc(nscl),
-     +     utau, qstar(nscl), wtsfc(nscl),
+     +     time, zody, zody74,
+     +     utau, wtsfc(nscl),
      +     uwsfc, vwsfc, amonin,
-     +     zol, hol, smal_e, sml_eg, Uo, Ttop(nscl),Tbot(nscl),
-     +     Tinit(nscl), TinitC    !Tianze 8/13/15
+     +     zol, hol, smal_e, sml_eg
       end type con_d
       type(con_d), target :: c_c
       real, pointer ::
-     +     zo, vk, vkin, vk74, vk74in, 
-     +     grav, gcp, fcor, fcor_h, zi, pi2,
-     +     batagk, t00, batag, vgcont, ugcont,
-     +     cdbtm, dtdzf(:), dtjump, ugal, divgls,
-     +     z1, utausv, xl, yl, zl, dx, dy, dz, dt,
-     +     fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax, 
-     +     time, zody, zody74, tsfcc(:),
-     +     utau, qstar(:), wtsfc(:), 
+     +     vk, vkin, vk74, vk74in,
+     +     gcp, fcor_h, pi2,
+     +     batagk, batag,
+     +     cdbtm, dtjump, ugal, divgls,
+     +     z1, utausv, dx, dy, dz, dt,
+     +     fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax,
+     +     time, zody, zody74,
+     +     utau, wtsfc(:),
      +     uwsfc, vwsfc, amonin,
-     +     zol, hol, smal_e, sml_eg, Uo, Ttop(:),Tbot(:),
-     +     Tinit(:), TinitC   !Tianze 8/13/15
+     +     zol, hol, smal_e, sml_eg
       contains
       subroutine fill_cc
 c     
 c     --------------- pointer associations for constant variables
 c     
-      zo     => c_c%zo
+
+!Boundary conditions and subroutine fill_cc
+
+
+!      zo     => c_c%zo
       vk     => c_c%vk 
       vkin   => c_c%vkin
       vk74   => c_c%vk74
       vk74in => c_c%vk74in
-      grav   => c_c%grav
+!      grav   => c_c%grav
       gcp    => c_c%gcp
-      fcor   => c_c%fcor
+!      fcor   => c_c%fcor
       fcor_h => c_c%fcor_h
-      zi     => c_c%zi
+!      zi     => c_c%zi
       pi2    => c_c%pi2
       batagk => c_c%batagk
-      t00    => c_c%t00
+c      t00    => c_c%t00
       batag  => c_c%batag
-      vgcont => c_c%vgcont
-      ugcont => c_c%ugcont
+c     vgcont => c_c%vgcont
+c      ugcont => c_c%ugcont
       cdbtm  => c_c%cdbtm
-      batagk => c_c%batagk
-      t00    => c_c%t00
-      batag  => c_c%batag
-      vgcont => c_c%vgcont
-      ugcont => c_c%ugcont
-      cdbtm  => c_c%cdbtm
-      dtdzf  => c_c%dtdzf
+c      dtdzf  => c_c%dtdzf
       dtjump => c_c%dtjump
       ugal   => c_c%ugal
       divgls => c_c%divgls
       z1     => c_c%z1
       utausv => c_c%utausv
-      xl     => c_c%xl
-      yl     => c_c%yl
-      zl     => c_c%zl
+c      xl     => c_c%xl
+c      yl     => c_c%yl
+c      zl     => c_c%zl
       dx     => c_c%dx
       dy     => c_c%dy
       dz     => c_c%dz
@@ -326,9 +325,9 @@ c
       time   => c_c%time
       zody   => c_c%zody
       zody74 => c_c%zody74
-      tsfcc  => c_c%tsfcc
+c     tsfcc  => c_c%tsfcc
       utau   => c_c%utau
-      qstar  => c_c%qstar
+c     qstar  => c_c%qstar
       wtsfc  => c_c%wtsfc
       uwsfc  => c_c%uwsfc
       vwsfc  => c_c%vwsfc
@@ -337,11 +336,11 @@ c
       hol    => c_c%hol
       smal_e => c_c%smal_e
       sml_eg => c_c%sml_eg
-      Uo     => c_c%Uo
-      Ttop   => c_c%Ttop
-      Tbot   => c_c%Tbot
-      Tinit  => c_c%Tinit      !Tianze 8/13/15
-      TinitC => c_c%TinitC     !Tianze 8/13/15
+c     Uo     => c_c%Uo
+c     Ttop   => c_c%Ttop
+c     Tbot   => c_c%Tbot
+c     Tinit  => c_c%Tinit      !Tianze 8/13/15
+c     TinitC => c_c%TinitC     !Tianze 8/13/15
       return
       end subroutine fill_cc
       end module con_data
@@ -660,7 +659,6 @@ c
          else
             call get_fields
 c            call random   
-c           call initialize_scalars  !DO NOT USE
 
 
          !!! Tianze 08/10/15 
@@ -917,25 +915,6 @@ c
       stop
       end
 
-      subroutine initialize_scalars !Tianze 8/13/15
-      use pars
-      use particles
-      use con_data
-      use fields
-      implicit none
-
-      integer :: iz,iy,ix
-
-      do iz = izs-1,ize+1
-      do iy = iys,iye
-      do ix = 1,nnx
-      t(ix,iy,1,iz) = Tinit(1)
-      t(ix,iy,2,iz) = Tinit(2)
-      enddo
-      enddo
-      enddo
-      return
-      end
 
       subroutine get_max
 c
@@ -1268,7 +1247,7 @@ c
       path_viz_xz = '/scratch365/tpeng2/opench/eva1/r25p1new'
       path_viz_yz = '/scratch365/tpeng2/opench/eva1/r25p1new'
       path_stuf   = '/scratch365/tpeng2/opench/eva1/r25p1new'
-      path_histog = '/scratch365/tpeng2/opench/eva1/r25p1new'
+      path_hist = '/scratch365/tpeng2/opench/eva1/r25p1new'
 c
 
       return
@@ -5642,9 +5621,6 @@ c
          Uo = 0  !BC velocity 
          Ttop(1) = 25+273.15  !http://www.nasa.gov/centers/goddard/images/content/148071main_Katrina_SSHeights.jpg 
          Tbot(1) = 28+273.15
-         Tinit(1)   = Tbot(1) !Tianze to match Brian's paper !293.15 !Tianze 8/13/15
-         TinitC  = Tinit(1) - 273.15  !Tianze 8/13/15
-c
 	 topC=(Ttop(1)-273.15)
          botC=(Tbot(1)-273.15)  
          
@@ -6812,7 +6788,6 @@ c
       integer(kind=mpi_offset_kind) :: offset, disp
       integer(kind=k8)              :: nsize, nsize2
       real, allocatable, dimension(:,:,:) :: temp
-      character*80 path_ran
       logical there
 c
       allocate(temp(nvar,nnx,iys:iye))
@@ -12029,10 +12004,6 @@ c     ============== SET BOUNDS OF BINS ========== 11/01/17
       dvp2=0.75
       dwp1=-0.5
       dwp2=0.25
-      mvz1=4.0/3.0*pi*radius_mass**3*rhow*dwp1
-      mvz2=4.0/3.0*pi*radius_mass**3*rhow*dwp2
-      mvx1=4.0/3.0*pi*radius_mass**3*rhow*dup1
-      mvx2=4.0/3.0*pi*radius_mass**3*rhow*dup2
       dTfp1=-0.5
       dTfp2=1.8
       dqfp1=-0.1e-4
@@ -13204,7 +13175,7 @@ c
         cgrid = '.le.'
         write(num,'(i3.3)') itn
 
-        iblnk = index(path_histog,' ')
+        iblnk = index(path_hist,' ')
         call blnk(iblks)
         write(iblks(1:7),'(i7.7)') istep
         iblks(8:8) = '_'
@@ -13213,93 +13184,93 @@ c
 
        !HISTGRAM FILE NAME       
         !File 90000
-        path_tL = path_histog(1:iblnk-1)//'/restime'//
+        path_tL = path_hist(1:iblnk-1)//'/restime'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
        
         !File 90001
-        path_Tpdiff = path_histog(1:iblnk-1)//'/Tpdiff'//
+        path_Tpdiff = path_hist(1:iblnk-1)//'/Tpdiff'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
         
         !File 90002
-        path_rpdiff = path_histog(1:iblnk-1)//'/rpdiff'//
+        path_rpdiff = path_hist(1:iblnk-1)//'/rpdiff'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 90003
-        path_updiff = path_histog(1:iblnk-1)//'/updiff'//
+        path_updiff = path_hist(1:iblnk-1)//'/updiff'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
  
         !File 90004
-        path_vpdiff = path_histog(1:iblnk-1)//'/vpdiff'//
+        path_vpdiff = path_hist(1:iblnk-1)//'/vpdiff'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
  
         !File 90005
-        path_wpdiff = path_histog(1:iblnk-1)//'/wpdiff'//
+        path_wpdiff = path_hist(1:iblnk-1)//'/wpdiff'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
  
         !File 90006
-        path_mvz = path_histog(1:iblnk-1)//'/mvz'//
+        path_mvz = path_hist(1:iblnk-1)//'/mvz'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
  
         !File 90007
-        path_dTfp = path_histog(1:iblnk-1)//'/dTfp'//
+        path_dTfp = path_hist(1:iblnk-1)//'/dTfp'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
  
         !File 90008
-        path_dqfp = path_histog(1:iblnk-1)//'/dqfp'//
+        path_dqfp = path_hist(1:iblnk-1)//'/dqfp'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
  
 
       !2D Histogram
         !File 91000
-        path2D_tdTp = path_histog(1:iblnk-1)//'/tdTp_2D'//
+        path2D_tdTp = path_hist(1:iblnk-1)//'/tdTp_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91001
-        path2D_tdrp = path_histog(1:iblnk-1)//'/tdrp_2D'//
+        path2D_tdrp = path_hist(1:iblnk-1)//'/tdrp_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91002
-        path2D_tdTfp = path_histog(1:iblnk-1)//'/tdTfp_2D'//
+        path2D_tdTfp = path_hist(1:iblnk-1)//'/tdTfp_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91003
-        path2D_tdqfp = path_histog(1:iblnk-1)//'/tdqfp_2D'//
+        path2D_tdqfp = path_hist(1:iblnk-1)//'/tdqfp_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91004
-        path2D_tMvz = path_histog(1:iblnk-1)//'/tMvz_2D'//
+        path2D_tMvz = path_hist(1:iblnk-1)//'/tMvz_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91005
-        path2D_tMvx = path_histog(1:iblnk-1)//'/tMvx_2D'//
+        path2D_tMvx = path_hist(1:iblnk-1)//'/tMvx_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91006
-        path2D_thmax = path_histog(1:iblnk-1)//'/thmax_2D'//
+        path2D_thmax = path_hist(1:iblnk-1)//'/thmax_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91007
-        path2D_hdTp = path_histog(1:iblnk-1)//'/hdTp_2D'//
+        path2D_hdTp = path_hist(1:iblnk-1)//'/hdTp_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91008
-        path2D_hdrp = path_histog(1:iblnk-1)//'/hdrp_2D'//
+        path2D_hdrp = path_hist(1:iblnk-1)//'/hdrp_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91009
-        path2D_hMvz = path_histog(1:iblnk-1)//'/hMvz_2D'//
+        path2D_hMvz = path_hist(1:iblnk-1)//'/hMvz_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91010
-        path2D_hMvx = path_histog(1:iblnk-1)//'/hMvx_2D'//
+        path2D_hMvx = path_hist(1:iblnk-1)//'/hMvx_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91011
-        path2D_TpdTfp = path_histog(1:iblnk-1)//'/TpdTfp_2D'//
+        path2D_TpdTfp = path_hist(1:iblnk-1)//'/TpdTfp_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91012
-        path2D_qpdqfp = path_histog(1:iblnk-1)//'/qpdqfp_2D'//
+        path2D_qpdqfp = path_hist(1:iblnk-1)//'/qpdqfp_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
 
@@ -13569,4 +13540,64 @@ c    !!! 2-D Histograms
         hist2D_qpdqfp(:,:)=0.0 
 
         end subroutine clean_histograms
+
+        subroutine read_input_file
+        use pars
+      use particles
+      use con_data
+      implicit none
+
+      character(48) :: label
+      character(180) :: params_dir
+      namelist /step_params/ iti,itmax,imean,ihst,itape,
+     +                       itstr,it_his,it_viz,i_viz,itn
+
+      namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,qstar, tsfcc,
+     +         zi, zl, xl, yl, zw1
+
+      namelist /flags/ noalis,ismlt,ifree,isfc,iradup,
+     +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
+     +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,
+     +         ispray,icouple,iTcouple,iHcouple,ievap
+
+      namelist /path_names/ path_seed,path_part,path_res,
+     +         path_sav,path_his,path_viz_xy,path_viz_xz,
+     +         path_viz_yz,path_stuf,path_hist,path_ran
+
+      namelist /thermal/ radius_init,radius_mass,rhow,nuf,
+     +         Cpp,Cpa,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os,
+     +         m_s,Sal,Ms,delta_vis
+
+      namelist /constants/ tnumpart,part_grav,grav,t00,fcor,
+     +         dtdzf,zo,ugcont,vgcont,dTfp1,dTfp2,dqfp1,dqfp2,Tp1,Tp2,
+     +         Tf1,Tf2,qstr1,qstr2,qinf1,qinf2,hmax1,hmax2
+
+
+      !params.in contains namelists to read
+      !open(12, file="./params.in", status="old")
+      call get_command_argument(1,params_dir)
+      open(12,file=params_dir,status="old")
+
+      read(12,nml=step_params)
+      if (myid==0) print step_params
+
+      read(12,nml=flags)
+      if (myid==0) print flags
+
+      read(12,nml=grid_params)
+      if (myid==0) print grid_params
+
+      read(12,nml=path_names)
+      if (myid==0) print path_names
+
+      read(12,nml=constants)
+      if (myid==0) print constants
+      !Calculate dependent inputs
+      CpaCpp = Cpa/Cpp
+      dz_U = (zl-0.0)/maxnz
+      mvz1=4.0/3.0*pi*radius_mass**3*rhow*dwp1
+      mvz2=4.0/3.0*pi*radius_mass**3*rhow*dwp2
+      mvx1=4.0/3.0*pi*radius_mass**3*rhow*dup1
+      mvx2=4.0/3.0*pi*radius_mass**3*rhow*dup2
+      end
  
