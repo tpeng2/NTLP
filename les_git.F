@@ -1,9 +1,11 @@
 c     ----------------------------------------------------------------------
       module pars
 c     ----------------------------------------------------------------------
+      ! In params.in 
       integer, parameter :: 
      +     iti,itmax, imean, ihst,itape,
      +     itstr, it_his, it_viz, i_viz   !change u.le if iti >0
+      ! In params. in
       integer, parameter ::
      +     noalis, ismlt, ifree, isfc, iradup,
      +     iupwnd, ibuoy, ifilt, itcut, isubs, ibrcl,
@@ -35,8 +37,10 @@ c
      +     maxnx2 = maxnx + 2,
      +     maxny2 = maxny + 2
 c     ------------ Boundary Conditions moved from con_d for params.in
-      real :: zo,grav,fcor,zi,t00,vgcont,ugcont,dtdzf(nscl)
-      real :: xl,yl,zl,tsfcc(nscl),qstar(nscl),Uo,Ttop(nscl),Tbot(nscl)
+      real :: Uo,Ttop(nscl),Tbot(nscl),Tinit(nscl),qstar(nscl)
+      real :: tsfcc(nscl),TtopC,TbotC,RHB,RHT !input
+      real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dtdzf(nscl),zo,vgcont,ugcont
+      real :: u_geo,v_geo !Geostrophic wind balance pressure gradient
 c     ----------------------------------------------------------------------
       integer ::    nnx, nny, nnz, nxy, ncx, nnxp1, nnyp1, ncy,
      +     nnxp2, nnyp2, nnzp1, ivis, nnzm1, isize, krec,
@@ -137,6 +141,7 @@ c     ----------------------------------------------------------------------
       real :: residual(rbins)
       real :: Rep_avg,part_grav,Vpmax !Tianze 9/11/15 !Brian 8/14/14
       real :: dmb,dmm,dmt !Tianze 7/29/15
+      !Following three lines are all set in the input file 9/18/18
       real :: radius_init,radius_mass,rhow,nuf  
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os
       real :: m_s,Sal,Ms,delta_vis 
@@ -626,9 +631,9 @@ c
 c -------- set number of x-y slab cpus
 c
       !ncpu_s = 16
-      ncpu_s = 8
+c     ncpu_s = 8
 c
-      itn      = 49
+c     itn      = 49
       case_inp = 'cou'
 c
       call get_units
@@ -1236,18 +1241,18 @@ c
       use pars
 c
 c
-      path_seed   = '/scratch365/tpeng2/opench/eva1/r25p1new'
-      path_part   = '/scratch365/tpeng2/opench/eva1
-     +/r25p1new/part.le.cou049'
-      path_res    = '/scratch365/tpeng2/opench/eva1
-     +/r25p1new/u.le.cou049'
-      path_sav    = '/scratch365/tpeng2/opench/eva1/r25p1new'
-      path_his    = '/scratch365/tpeng2/opench/eva1/r25p1new'
-      path_viz_xy = '/scratch365/tpeng2/opench/eva1/r25p1new'
-      path_viz_xz = '/scratch365/tpeng2/opench/eva1/r25p1new'
-      path_viz_yz = '/scratch365/tpeng2/opench/eva1/r25p1new'
-      path_stuf   = '/scratch365/tpeng2/opench/eva1/r25p1new'
-      path_hist = '/scratch365/tpeng2/opench/eva1/r25p1new'
+c     path_seed   = '/scratch365/tpeng2/opench/eva1/r25p1new'
+c     path_part   = '/scratch365/tpeng2/opench/eva1
+c    +/r25p1new/part.le.cou049'
+c     path_res    = '/scratch365/tpeng2/opench/eva1
+c    +/r25p1new/u.le.cou049'
+c     path_sav    = '/scratch365/tpeng2/opench/eva1/r25p1new'
+c     path_his    = '/scratch365/tpeng2/opench/eva1/r25p1new'
+c     path_viz_xy = '/scratch365/tpeng2/opench/eva1/r25p1new'
+c     path_viz_xz = '/scratch365/tpeng2/opench/eva1/r25p1new'
+c     path_viz_yz = '/scratch365/tpeng2/opench/eva1/r25p1new'
+c     path_stuf   = '/scratch365/tpeng2/opench/eva1/r25p1new'
+c     path_hist = '/scratch365/tpeng2/opench/eva1/r25p1new'
 c
 
       return
@@ -5568,18 +5573,18 @@ c
       use con_stats
 c
       real :: Cpa,rhoa,Mw,Ru
-      real :: RHT,RHB,RHinit
+      real :: RHinit
 
       pi   = 4.0*atan(1.0)
       pi2  = 2.0*pi
-      grav = 3
+c     grav = 3
       bfac = 1.0
       if(ibuoy.eq.0) bfac = 0.
 c
 c -------------------- case specific data
 c
       if(iocean .eq. 1) then
-         t00     = 283.
+c        t00     = 283.
          t00b    = 5000.0
          cp      = 4.20e03
          gcp     = grav/cp
@@ -5608,48 +5613,48 @@ c        izi     = nnz
 c
 c ---------- if stretched grid specify location of first point
 c
-         zw1 = -0.5
+c        zw1 = -0.5
       else
-         t00     = 273 !293.15 !Tianze 8-10-15
+c        t00     = 273 !293.15 !Tianze 8-10-15
          cp      = 1.e3
          gcp     = grav/cp
          batag   = bfac*grav/t00
          !fcor    = 1.0e-04
-         fcor    = 0.0
+c        fcor    = 0.0
          fcor_h  = 0.0
 
-         Uo = 0  !BC velocity 
-         Ttop(1) = 25+273.15  !http://www.nasa.gov/centers/goddard/images/content/148071main_Katrina_SSHeights.jpg 
-         Tbot(1) = 28+273.15
-	 topC=(Ttop(1)-273.15)
-         botC=(Tbot(1)-273.15)  
+c        Uo from params.in 
+c        TTtopC, TTbotC from params.in
+         Ttop(1) = TtpoC+273.15  !http://www.nasa.gov/centers/goddard/images/content/148071main_Katrina_SSHeights.jpg 
+         Tbot(1) = TbotC+273.15
          
-         RHT = 90.0/100.0
-         RHB = 100.0/100.0 
-         RHinit = 100.0/100.0     
-    
+c        RHT from params.in
+c        RHB from params.in
+         RHinit = RHB    
+         Tinit(1) = Tbot(1) 
+         TinitC=TbotC
          Ttop(2) =  RHT*Mw/Ru/Ttop(1)*610.94*
-     +               EXP(17.6257*topC/(topC+243.04))/rhoa
+     +               EXP(17.6257*TtopC/(topC+243.04))/rhoa
          Tbot(2) =  RHB*Mw/Ru/Tbot(1)*610.94*
-     +               EXP(17.6257*botC/(botC+243.04))/rhoa
+     +               EXP(17.6257*TbotC/(botC+243.04))/rhoa
          Tinit(2) =  RHinit*Mw/Ru/Tinit(1)*610.94*
      +               EXP(17.6257*TinitC/(TinitC+243.04))/rhoa
 c
 c        wtsfc is defined in upward direction
-         wtsfc(1) = 0.0 !-32.0/Cpa/rhoa  !Not Advective Flux in DNS
-         wtsfc(2) = 0.0
+c        wtsfc(1) = 0.0 !-32.0/Cpa/rhoa  !Not Advective Flux in DNS
+c        wtsfc(2) = 0.0
 c
          qstar(1)=wtsfc(1)
          qstar(2)=wtsfc(2)
 c
-         dtdzf(1)=0.003
-         dtdzf(2)=0.003
+c        dtdzf(1)=0.003
+c        dtdzf(2)=0.003
 c
          dtjump  = 0.0
          divgls  = 0.0
-         zo      = 0.1
-         ugcont  = 0.01 
-         vgcont  = 0.0
+c        zo      = 0.1
+c        ugcont  = 0.01 
+c        vgcont  = 0.0
 !         zi      = 1000.0
 !         xl      = 5120.0
 !         yl      = 5120.0
@@ -5661,17 +5666,17 @@ c
          !zl = 12.0
 
          !Particle channel:
-         zi = 0.04
-         xl      = pi2*0.04
+c        zi = 0.04
+c        zl      = 0.04
+         xl      = pi2*zl
          !yl      = pi2*0.02
-         yl      = pi2*0.04
-         zl      = 0.04
+         yl      = pi2*zl
   
 c
 c ---------- if stretched grid specify location of first point
 c
          !Particle channel:
-         zw1     = 0.00013333   !dz+(min) = 1
+c        zw1     = 0.00013333   !dz+(min) = 1
          !zw1     = 0.000013333    !dz+(min) = 0.1
 c        izi     = int(float(nnz)*zi/zl)
          izi     = (60*nnz)/100
@@ -11885,7 +11890,7 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       !For the channel case, set the total number of particles:
       deltaz = zmax-zmin
 
-      tnumpart = 424643 !Tianze 8/27/15 r25p1new !1036730 
+c     tnumpart = 424643 !Tianze 8/27/15 r25p1new !1036730 
       !tnumpart = 2248907
       !tnumpart = 150016
       !tnumpart = 66350
@@ -11926,29 +11931,29 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       use pars
       implicit none 
 
-      rhoa = 1.1 !kg/m^3 mixture ** Might want to consider 1.1 (26C, 970hPa) -> mu?   http://www.baranidesign.com/air-density/air-density.htm !Tianze changed rhoa from 1.1 to 1.194 on 8/10/15
-      rhow = 1000.0 !kg/m^3
-      part_grav = 0.8027
-      nuf  = 1.537e-5 !m^2/s  !1.537e-5 !Tianze changed to 1.564e-5
+c     rhoa = 1.1 !kg/m^3 mixture ** Might want to consider 1.1 (26C, 970hPa) -> mu?   http://www.baranidesign.com/air-density/air-density.htm !Tianze changed rhoa from 1.1 to 1.194 on 8/10/15
+c     rhow = 1000.0 !kg/m^3
+c     part_grav = 0.8027
+c     nuf  = 1.537e-5 !m^2/s  !1.537e-5 !Tianze changed to 1.564e-5
 
       !Thermal stuff:
-      Cpa = 1006.0 !http://www.mhtl.uwaterloo.ca/old/onlinetools/airprop/airprop.html
-      Cpp = 4179.0 !J/kg-K
-      CpaCpp = Cpa/Cpp
-      Pra = 0.715 !nuf/2.1145E-5 !0.71
-      Sc = 0.615 !nuf/0.000024992 !Brian 7/29/14  (@25degC: Dm =0.000025 = 25E-6m2/s)
-      Mw = 0.018015 !kg/mol !Brian 7/29/14 
-      Ru = 8.3144621 !m^3*Pa/K/mol !Brian 7/29/14
-      Ms = 0.05844  !kg/mol
-      Lv =(25.0 - 0.02274*26.0)*10.0**5 !J/Kg Hardcoding Tianze 11/1/17
-      Gam = 7.28*10.0**(-2) !N/m
-      Ion = 2.0
-      Os = 1.093
+c     Cpa = 1006.0 !http://www.mhtl.uwaterloo.ca/old/onlinetools/airprop/airprop.html
+c     Cpp = 4179.0 !J/kg-K
+c     CpaCpp = Cpa/Cpp
+c     Pra = 0.715 !nuf/2.1145E-5 !0.71
+c     Sc = 0.615 !nuf/0.000024992 !Brian 7/29/14  (@25degC: Dm =0.000025 = 25E-6m2/s)
+c     Mw = 0.018015 !kg/mol !Brian 7/29/14 
+c     Ru = 8.3144621 !m^3*Pa/K/mol !Brian 7/29/14
+c     Ms = 0.05844  !kg/mol
+c     Lv =(25.0 - 0.02274*26.0)*10.0**5 !J/Kg Hardcoding Tianze 11/1/17
+c     Gam = 7.28*10.0**(-2) !N/m
+c     Ion = 2.0
+c     Os = 1.093
       
-      delta_vis = 0.000163 !Bounce at viscous length
-      radius_init = 25.00e-6 !30.9e-6 !m   !Tianze 8/14/15 !40.6e-6
-      radius_mass = 25.00e-6 !30.9e-6 !m   !Tianze 8/14/15 !40.6e-6
-      Sal = 34.0 !PSU ~=gNaCl/kgH2O
+c     delta_vis = 0.000163 !Bounce at viscous length
+c     radius_init = 25.00e-6 !30.9e-6 !m   !Tianze 8/14/15 !40.6e-6
+c     radius_mass = 25.00e-6 !30.9e-6 !m   !Tianze 8/14/15 !40.6e-6
+c     Sal = 34.0 !PSU ~=gNaCl/kgH2O
 
       end subroutine  thermal_and_part_prop
 
@@ -11992,31 +11997,31 @@ c     estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)
 c    +                                           +EFFc-EFFs)    
 
 c     ============== SET BOUNDS OF BINS ========== 11/01/17
-      tL1=0.0
-      tL2=20.0
-      dTp1=-1.80
-      dTp2=0.75
-      drp1=-2.75e-06
-      drp2=0.15e-06
-      dup1=-0.5
-      dup2=2.0
-      dvp1=-0.75
-      dvp2=0.75
-      dwp1=-0.5
-      dwp2=0.25
-      dTfp1=-0.5
-      dTfp2=1.8
-      dqfp1=-0.1e-4
-      dqfp2=2.0e-3
-      Tp1=300.5
-      Tp2=301.5
-      Tf1=300.5
-      Tf2=301.3
-      qstr1=0.02
-      qstr2=0.025
-      qinf1=0.02
-      qinf2=0.025
-      hmax1=0.0
+c     tL1=0.0
+c     tL2=20.0
+c     dTp1=-1.80
+c     dTp2=0.75
+c     drp1=-2.75e-06
+c     drp2=0.15e-06
+c     dup1=-0.5
+c     dup2=2.0
+c     dvp1=-0.75
+c     dvp2=0.75
+c     dwp1=-0.5
+c     dwp2=0.25
+c     dTfp1=-0.5
+c     dTfp2=1.8
+c     dqfp1=-0.1e-4
+c     dqfp2=2.0e-3
+c     Tp1=300.5
+c     Tp2=301.5
+c     Tf1=300.5
+c     Tf2=301.3
+c     qstr1=0.02
+c     qstr2=0.025
+c     qinf1=0.02
+c     qinf2=0.025
+c     hmax1=0.0
       hmax2=zl
       
 
@@ -13549,28 +13554,37 @@ c    !!! 2-D Histograms
 
       character(48) :: label
       character(180) :: params_dir
-      namelist /step_params/ iti,itmax,imean,ihst,itape,
+     ! 10 step parameters
+       namelist /step_params/ iti,itmax,imean,ihst,itape,
      +                       itstr,it_his,it_viz,i_viz,itn
-
-      namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,qstar, tsfcc,
-     +         zi, zl, xl, yl, zw1
-
+     ! 23 flags
       namelist /flags/ noalis,ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,
      +         ispray,icouple,iTcouple,iHcouple,ievap
+ 
+     ! 10 grid parameters
+      namelist /grid_params/ ncpu_s,Uo,TtopC,TbotC,RHT,RHBm,wtsfc,
+     +         zi, zl, zw1
 
+     ! 11 params for BCs and ICs
+      namelist /BCsICs/ grav,t00,fcor,dtdzf,zo,ugcont,vgcont,tnumpart,
+     +                  part_grav,u_geo,v_geo
+
+     ! 11 path names
       namelist /path_names/ path_seed,path_part,path_res,
      +         path_sav,path_his,path_viz_xy,path_viz_xz,
      +         path_viz_yz,path_stuf,path_hist,path_ran
 
-      namelist /thermal/ radius_init,radius_mass,rhow,nuf,
+     ! 18 material properties
+     ! CppCpa is calculated in this file later
+      namelist /constants/ radius_init,radius_mass,rhow,nuf,
      +         Cpp,Cpa,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os,
-     +         m_s,Sal,Ms,delta_vis
-
-      namelist /constants/ tnumpart,part_grav,grav,t00,fcor,
-     +         dtdzf,zo,ugcont,vgcont,dTfp1,dTfp2,dqfp1,dqfp2,Tp1,Tp2,
-     +         Tf1,Tf2,qstr1,qstr2,qinf1,qinf2,hmax1,hmax2
+     +         Sal,Ms,delta_vis
+     ! 25 params for partical statistics for PDF
+      namelist /PDF/tL_1,tL_2,dTp1,dTp2,drp1,drp2,dup1,dup2,dvp1,dvp2,
+     +         dwp1,dwp2,dTfp1,dTfp2,dqfp1,dqfp2,Tp1,Tp2,
+     +         Tf1,Tf2,qstr1,qstr2,qinf1,qinf2,hmax1
 
 
       !params.in contains namelists to read
@@ -13588,10 +13602,18 @@ c    !!! 2-D Histograms
       if (myid==0) print grid_params
 
       read(12,nml=path_names)
+      if (myid==0) print BCsICs
+
+      read(12,nml=path_names)
       if (myid==0) print path_names
 
       read(12,nml=constants)
-      if (myid==0) print constants
+      if (myid==0) print thermal
+
+      read(12,nml=constants)
+      if (myid==0) print PDF
+
+
       !Calculate dependent inputs
       CpaCpp = Cpa/Cpp
       dz_U = (zl-0.0)/maxnz
@@ -13599,5 +13621,6 @@ c    !!! 2-D Histograms
       mvz2=4.0/3.0*pi*radius_mass**3*rhow*dwp2
       mvx1=4.0/3.0*pi*radius_mass**3*rhow*dup1
       mvx2=4.0/3.0*pi*radius_mass**3*rhow*dup2
+      hmax2=zl
       end
  
