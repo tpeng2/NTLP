@@ -10875,8 +10875,6 @@ c ========================= HISTOGRAM (Histog)  =============================
  
         xv = ran2(iseed)*(xmax-xmin) + xmin
         yv = ran2(iseed)*(ymax-ymin) + ymin
-        if (myid==0) write(*,*) 'time,xv: ',time,xv
-        if (myid==0) write(*,*) 'time,xmax: ',time,xmax
         
         !Inject the particles upwards:
         !get the initial vertical velocity:
