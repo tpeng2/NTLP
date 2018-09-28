@@ -12,7 +12,12 @@ c     ----------------------------------------------------------------------
      +     iocean, method, idebug, iz_space,
      +     ivis0, ifix_dt, new_vis,
      +     ispray,icouple,iTcouple, 
-     +     iHcouple,ievap !iHcouple also controls TEcouple
+     +     iHcouple,ievap,iszcls,iSSGF
+         !iHcouple also controls TEcouple
+         !iszcls spray size
+         !iszcls = 0, monodisperse; =1, poly-fixed size, 
+         !iszcls = 2, poly-continuos class
+        ! iSSGF=0 (uniform),1(A98),2(MV14)
 c    ---------------- global constant numbers ---------
       real :: pi ! 
 ! Set the scalar boundary condition based on isfc
@@ -143,10 +148,10 @@ c     ----------------------------------------------------------------------
       real :: Rep_avg,part_grav,Vpmax !Tianze 9/11/15 !Brian 8/14/14
       real :: dmb,dmm,dmt !Tianze 7/29/15
       !Following three lines are all set in the input file 9/18/18
-      real :: radius_init,radius_mass,rhow,nuf  
+      real :: radius_init,radius_mass,rhow,nuf,rpmax,rpmin  
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os
       real :: m_s,Sal,Ms,delta_vis 
-
+      integer :: Nrp !total number of size classes 9/25/18 
       !For statistics, bins bounds 11/1/17
       real :: tL1,tL2,dTp1,dTp2,drp1,drp2
       real :: dup1,dup2,dvp1,dvp2,dwp1,dwp2
@@ -210,11 +215,11 @@ c     update on 10/18/2017
 c     =========== Particle Type ===========
       !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
       type :: particle
-      integer :: pidx,procidx
+      integer :: pidx,procidx !add real-time szcls, initial known
       real :: vp(3),xp(3),uf(3),xrhs(3),vrhs(3),vp_init(3),Tp,Tprhs_s 
                                            !Tianze 6/17/16!Brian 7/29/14
       real :: Tprhs_L, Tf,radius,radrhs,qinf,qstar !Brian 7/29/14
-      real :: t_init,zp_max                          !Tianze 06/07/16
+      real :: t_init,zp_max,rp_init        !09/26/2018 !Tianze 06/07/16
       type(particle), pointer :: prev,next
       end type particle
 
@@ -1532,7 +1537,7 @@ c        dfac(iz) = 1.0
          dfac(iz) = 1.0
       enddo
 c
-c ------ set nmatch equal to fraction of initial zi in sr. random
+c ------ set nmatch equal to fraction of initial zi in sr. aandom
 c
 c     nmatch = izi/2
 c     nmatch = 16
@@ -10647,7 +10652,7 @@ c      end if
       use con_data
       implicit none
 
-      real :: xp(3),vp(3),Tp,qinfp  !Brian 7/29/14
+      real :: xp(3),vp(3),Tp,qinfp,rpran  !Brian 7/29/14
       integer :: idx,ix,proc_idx
 
       if (.NOT. associated(first_particle)) then
@@ -10671,9 +10676,20 @@ c      end if
       part%vp(1:3) = vp(1:3)
       part%Tp = Tp
       part%Tf = 0.0 !Tianze 9/28/15
+      
+c  Mono-dispsered or Poly-dispersed radius
+      if (iszcls .eq. 0) then
       part%radius = radius_init !Brian 7/9/14
 !      part%vp0(1:3) = 0.0
 !      part%uf0(1:3) = 0.0
+
+      else if(iszcls .eq. 1) then
+c     part%radius = radius_init !Brian 7/9/14
+      call create_random_partsize(rpmin,rpmax,rpran)
+      part%radius=rpran
+      if (myid==0) write (*,*) 'rp_ran',rpran
+      end if
+      part%rp_init = part%radius
       part%uf(1:3) = 0.0
       part%qinf = 0.0 !Tianze 9/28/15 !qinfp  !Brian 7/14/14
       part%qstar = 0.0 !Tianze 9/28/15 This term must be init. to 0
@@ -11890,9 +11906,10 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       include 'mpif.h' 
       integer :: values(8)
       integer :: idx,ix
+      integer :: Nr_ran !random generated size class 9/25/18
       real :: xv,yv,zv,ran2,deltaz
       real :: maxx,maxy,maxz
-
+      real :: szcls(Nrp),probsz(Nrp) 
       !Create the seed for the random number generator:
       call date_and_time(VALUES=values)
       iseed = -(myid+values(8)+values(7)+values(6))
@@ -12080,9 +12097,9 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       !Set up MPI datatypes for sending particle information
       !MUST UPDATE IF THINGS ARE ADDED/REMOVED FROM PARTICLE STRUCTURE
       !for type particle
-      nintegers = 2 
-      nreals = 6*3+10 !3*5+9 reals (eg. Tp,Tprhs,Tf,...) 
-      npointers = 2
+      nintegers = 2 !pidx,procidx
+      nreals = 6*3+10+1 !3*5+9 reals (eg. Tp,Tprhs,Tf,...rp_init) 
+      npointers = 2 
 
 
       blcts(1:3) = (/nintegers,nreals,npointers/) !3*5+9 reals (eg. Tp,Tprhs,Tf,...)
@@ -13575,11 +13592,11 @@ c    !!! 2-D Histograms
         ! 10 step parameters
         namelist /step_params/ iti,itmax,imean,ihst,itape,
      +                       itstr,it_his,it_viz,i_viz,itn
-        ! 23 flags
+        ! 23 flags +2 9/25/18
         namelist /flags/ noalis,ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,
-     +         ispray,icouple,iTcouple,iHcouple,ievap
+     +         ispray,icouple,iTcouple,iHcouple,ievap,iszcls,iSSGF
  
         ! 10 grid parameters
         namelist /grid_params/ ncpu_s,Uo,TtopC,TbotC,RHT,RHB,wtsfc,
@@ -13594,11 +13611,11 @@ c    !!! 2-D Histograms
      +         path_sav,path_his,path_viz_xy,path_viz_xz,
      +         path_viz_yz,path_stuf,path_hist,path_ran
 
-        ! 18 material properties
+        ! 18 material properties +3 9/25/18
         ! CppCpa is calculated in this file later
         namelist /constants/ radius_init,radius_mass,rhow,nuf,
      +         Cpp,Cpa,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os,
-     +         Sal,Ms,delta_vis
+     +         Sal,Ms,delta_vis,Nrp,rpmax,rpmin
         ! 25 params for partical statistics for PDF
         namelist /PDF/tL1,tL2,dTp1,dTp2,drp1,drp2,dup1,dup2,dvp1,dvp2,
      +         dwp1,dwp2,dTfp1,dTfp2,dqfp1,dqfp2,Tp1,Tp2,
@@ -13632,12 +13649,53 @@ c    !!! 2-D Histograms
         if (myid==0) print PDF
 
 
-      !Calculate dependent inputs
-      CpaCpp = Cpa/Cpp
-      mvz1=4.0/3.0*pi*radius_mass**3*rhow*dwp1
-      mvz2=4.0/3.0*pi*radius_mass**3*rhow*dwp2
-      mvx1=4.0/3.0*pi*radius_mass**3*rhow*dup1
-      mvx2=4.0/3.0*pi*radius_mass**3*rhow*dup2
-      hmax2=zl
-      end
+       !Calculate dependent inputs
+       CpaCpp = Cpa/Cpp
+       mvz1=4.0/3.0*pi*radius_mass**3*rhow*dwp1
+       mvz2=4.0/3.0*pi*radius_mass**3*rhow*dwp2
+       mvx1=4.0/3.0*pi*radius_mass**3*rhow*dup1
+       mvx2=4.0/3.0*pi*radius_mass**3*rhow*dup2
+       hmax2=zl
+       end
+
+        subroutine create_random_partsize(rpmin1,rpmax1,rpran1)
+        use pars
+        use fields
+        use con_data
+        use con_stats
+        use particles
  
+        real,intent(in) :: rpmax1,rpmin1
+        real,intent(out) :: rpran1
+        real,allocatable :: Sn(:)
+        real,allocatable :: Snscl(:),rpcrop(:),CDF(:)
+        integer :: irpmax,irpmin
+        integer :: n,j
+        real,dimension(800):: rpinit
+        real :: ran2
+        rpinit(1)=0.0
+        rpinit(2:800) = (/((5e-7*i),i=1,799)/)
+        allocate(Sn(size(rpinit)))
+        !non-scaled SSGF
+        if (iSSGF .eq. 0) then
+        Sn = 1 !not scaled yet 
+        else if (iSSGF .eq. 1) then
+        Sn = exp(-0.03*rpinit) ! for example
+        else if (iSSGF .eq. 2) then
+        Sn = log(0.02+rpinit) 
+        end if
+        
+        ! find index for useful range
+        irpmax=minloc(rpinit,DIM=1,MASK=(rpinit>=rpmax1))
+        irpmin=maxloc(rpinit,DIM=1,MASK=(rpinit<=rpmin1))
+        ! now scale the SSGF
+        n=size(Sn(irpmin:irpmax))
+        allocate(Snscl(n),rpcrop(n),CDF(n))
+        rpcrop=rpinit(irpmin:irpmax)
+        Snscl=Sn(irpmin:irpmax)/sum(Sn(irpmin:irpmax))
+        CDF(1) = Snscl(1)
+        do j=2,n
+        CDF(j)=CDF(j-1)+Snscl(j) 
+        end do
+        rpran1=rpcrop(minloc(CDF,DIM=1,MASK=(CDF>=ran2(iseed))))
+        end  
