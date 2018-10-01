@@ -13,7 +13,7 @@ c     ----------------------------------------------------------------------
      +     ivis0, ifix_dt, new_vis,
      +     ispray,icouple,iTcouple, 
      +     iHcouple,ievap,iszcls,iSSGF
-         !iHcouple also controls TEcouple
+c------- !iHcouple also controls TEcouple
          !iszcls spray size
          !iszcls = 0, monodisperse; =1, poly-fixed size, 
          !iszcls = 2, poly-continuos class
@@ -145,10 +145,10 @@ c     ----------------------------------------------------------------------
       integer :: iseed
       integer,parameter :: rbins=4
       real :: residual(rbins)
-      real :: Rep_avg,part_grav,Vpmax !Tianze 9/11/15 !Brian 8/14/14
+      real :: Rep_avg,massfrac !Tianze 9/11/15 !Brian 8/14/14
       real :: dmb,dmm,dmt !Tianze 7/29/15
       !Following three lines are all set in the input file 9/18/18
-      real :: radius_init,radius_mass,rhow,nuf,rpmax,rpmin  
+      real :: radius_init,rhow,nuf,rpmax,rpmin,Vpmax,part_grav  
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os
       real :: m_s,Sal,Ms,delta_vis 
       integer :: Nrp !total number of size classes 9/25/18 
@@ -160,7 +160,10 @@ c     ----------------------------------------------------------------------
       real :: Tf1,Tf2,qstr1,qstr2,qinf1,qinf2
       real :: hmax1,hmax2
 
-  
+      ! SSGF for subroutine create_random_radius
+      real,allocatable :: Sn(:)
+      real,allocatable :: Snscl(:),rpcrop(:),CDF(:)
+
 c     ========== HISTOGRAM ==========           !Tianze 06/06/16
 c        real, allocatable :: hist_example(:)
 c        if hist_xxx is declaired here, should be allocated in
@@ -10310,6 +10313,7 @@ c         pcount = 0
          diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
          Rep = 2.0*part%radius*diffnorm/nuf  
          Volp = pi2*2.0/3.0*part%radius**3
+         m_s = Sal/1000.0*4.0/3.0*pi*part%rp_init**3*rhow !mass of salt
          rhop = (m_s+Volp*rhow)/Volp
          taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2 !Brian 8/4/14
          !/Intermediate Values 
@@ -10389,34 +10393,6 @@ c         pcount = 0
 c          end if
 
 
-c      qq=rhostar/rhoa
-c      if (istage ==3 .and. part%procidx == 0 
-c     +                         .and. part%pidx == 6250 ) then
-c!      if (part%pidx == 1) then !Brian 8/13/14
-c!      write(*,*) 'proc',myid,'writing this'
-c      write(*,'(a7,4e15.6)') 'xp2:  ',time,part%xp(1:3)  !Brian 7/16/14 a4 ->a6
-c      !write(*,'(a7,4e15.6)') 'vp2:  ',time,part%vp(1:3)
-c      write(*,'(a7,4e15.6)') 'Tp2:  ',time,part%Tp
-c      write(*,'(a7,4e15.6)') 'Tf2:  ',time,part%Tf
-c      write(*,'(a7,4e15.6)') 'rad2: ',time,part%radius !Brian 7/9/14
-c      write(*,'(a7,4e15.6)') 'qinf2:',time,part%qinf !Brian 7/14/14
-c      write(*,'(a7,4e15.6)') 'rhs2: ',time,part%radrhs !Brian 7/9/14
-c      write(*,'(a7,4e15.6)') 'qq2:  ',time,qq !Brian 7/9/14
-c      end if
-
-c      if (part%procidx == 0 .and. part%pidx == 6250 ) then
-cc      if (part%pidx == 1) then !Brian 8/13/14
-c!      write(*,*) 'proc',myid,'writing this'
-c      write(*,'(a7,4e15.6)') 'xp3:  ',time,part%xp(1:3)  !Brian 7/16/14 a4 ->a6
-c      !write(*,'(a7,4e15.6)') 'vp3:  ',time,part%vp(1:3)
-c      write(*,'(a7,4e15.6)') 'Tp3:  ',time,part%Tp
-c      write(*,'(a7,4e15.6)') 'Tf3:  ',time,part%Tf
-c      write(*,'(a7,4e15.6)') 'rad3: ',time,part%radius !Brian 7/9/14
-c      write(*,'(a7,4e15.6)') 'qinf3:',time,part%qinf !Brian 7/14/14
-c      write(*,'(a7,4e15.6)') 'rhs3: ',time,part%radrhs !Brian 7/9/14
-c      write(*,'(a7,4e15.6)') 'qq3:  ',time,qq !Brian 7/9/14
-c      end if
-
 
 
         part => part%next
@@ -10435,41 +10411,9 @@ c      end if
       if (istage == 1) tot_reintro = 0
       call particle_bcs_nonperiodic
       if (istage == 3) his_reintro = tot_reintro
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !t_f = mpi_wtime()
-      !if (myid==5) write(*,*) 'time bc_non:', t_f - t_s
-
-      ! call particle_reintro
-
-      !Check to see if particles left processor
-      !If they did, remove from one list and add to another
-      !t_s = mpi_wtime()
       call particle_exchange
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !t_f = mpi_wtime()
-      !if (myid==5) write(*,*) 'time exchg:', t_f - t_s
-
-      !Now enforce periodic bcs 
-      !just updates x,y locations if over xl,yl or under 0
-      !t_s = mpi_wtime()
       call particle_bcs_periodic
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !t_f = mpi_wtime()
-      !if (myid==5) write(*,*) 'time bc_per:', t_f - t_s
-
-
-
-      !Now that particles are in their updated position, 
-      !compute their contribution to the momentum coupling:
-      !t_s = mpi_wtime()
       call particle_coupling_update
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !t_f = mpi_wtime()
-      !if (myid==5) write(*,*) 'time cpl: ', t_f - t_s
-
- 
-      !Finally, now that coupling and statistics arrays are filled, 
-      !Transpose them back to align with the velocities:
       call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,1),
      +                partsrc(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
@@ -10592,12 +10536,6 @@ c      end if
       numpart = numpart + 1
       part => part%next
       end do
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !t_f = mpi_wtime()
-      !if (myid==5) write(*,*) 'time numpart: ', t_f - t_s
- 
-      !t_s = mpi_wtime()
-      !Compute total number of particles
       call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,
      +                   mpi_comm_world,ierr)
       !Compute average particle Reynolds number
@@ -10641,11 +10579,9 @@ c      end if
       phiw = phiw/xl/yl/zl/rhoa
       phiv = phiv/xl/yl/zl
 
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !t_f = mpi_wtime()
-      !if (myid==5) write(*,*) 'time mpi_allreduce: ', t_f - t_s
 
       end subroutine particle_update_rk3
+
       subroutine create_particle(xp,vp,Tp,idx,proc_idx) !Currently ignoring Tp and qinfp
       use particles
       use pars
@@ -10670,7 +10606,7 @@ c      end if
       end if
         if (myid==0 .and. idx==1) write(*,*) 'time,xp: ',time,xp
   
-      part%xp(1:3) = xp(1:3)
+      part%xp(1:3) = xp(1:3) !z_p will be updated once rp is assigned
         if (myid==0 .and. idx==1) write(*,*) 
      +'time,pxp: ',time,part%xp(1)
       part%vp(1:3) = vp(1:3)
@@ -10680,16 +10616,14 @@ c      end if
 c  Mono-dispsered or Poly-dispersed radius
       if (iszcls .eq. 0) then
       part%radius = radius_init !Brian 7/9/14
-!      part%vp0(1:3) = 0.0
-!      part%uf0(1:3) = 0.0
 
       else if(iszcls .eq. 1) then
-c     part%radius = radius_init !Brian 7/9/14
       call create_random_partsize(rpmin,rpmax,rpran)
       part%radius=rpran
-      if (myid==0) write (*,*) 'rp_ran',rpran
+      if (myid==0) write (*,*) 'rp_ran:',rpran
       end if
       part%rp_init = part%radius
+      part%xp(3)=part%rp_init  !overwrite zp value, Tianze 10/1/2018
       part%uf(1:3) = 0.0
       part%qinf = 0.0 !Tianze 9/28/15 !qinfp  !Brian 7/14/14
       part%qstar = 0.0 !Tianze 9/28/15 This term must be init. to 0
@@ -10712,55 +10646,6 @@ c     part%radius = radius_init !Brian 7/9/14
       dFdr_uniform = 0.5e-6
 
       end function dFdr_uniform
-
-      subroutine particle_reintro(istage)
-      use particles
-      use pars
-      use con_data
-      use tank_pars
-      implicit none
-      include 'mpif.h'
-
-      integer :: ierr,randproc,np,tmp_reintro,istage,ix
-      real :: xv,yv,zv,ran2,vinj
-      real :: xpart(nnx),y2part(nnx),yp1,ypn,ddx
-
-c      call mpi_allreduce(num_reintro,tmp_reintro,1,mpi_integer,mpi_sum,
-c     +       mpi_comm_world,ierr)
-c
-c      if (myid==0) write(*,*) 'time,tot_reintro: ',time,tmp_reintro
-c
-c      tot_reintro = tot_reintro + tmp_reintro
-      
-      !Now everyone knows how many total particles need to be reintroduced
-      !For each one to be reintroduced, get a random processor who creates it:
-
-      do np=1,tmp_reintro
-
-      !Proc 0 gets a random proc ID, broadcasts it out:
-      if (myid==0) randproc = floor(ran2(iseed)*numprocs)
-
-      call mpi_bcast(randproc,1,mpi_integer,0,mpi_comm_world,ierr)
-
-       if (myid==randproc) then
-
-        xv = ran2(iseed)*(xmax-xmin) + xmin
-        yv = ran2(iseed)*(ymax-ymin) + ymin
-
-        !Inject the particles upwards:
-        !get the initial vertical velocity:
-        vinj = ran2(iseed)*Vpmax
-        !vinj = Vpmax
-        zv = radius_init
-        !zv = zw1
-c        call create_particle((/xv,yv,zv/),(/0.0,0.0,vinj/),Tbot(1),2) !Particle idx should be 2 in order to be different from the original particles -Tianze 9/11/15
-
-      !       subroutine create_particle(xp,vp,Tp,qinfp,idx)
-       end if
-      end do
-
-
-      end subroutine particle_reintro
 
       subroutine particle_bcs_nonperiodic
       use particles
@@ -10810,6 +10695,7 @@ c     if (myid==0) write(*,*) 'time,xp1: ',time,part%xp(1)
         procidx_tmp = part%procidx !Recording current processor ID
         tp_end = time
         ! 1D histogram data
+        m_s = Sal/1000.0*4.0/3.0*pi*part%rp_init**3*rhow !9/30/2018
         rhop = (m_s+4.0/3.0*pi*part%radius**3*rhow)/
      +(4.0/3.0*pi*part%radius**3)
         tL = tp_end-part%t_init
@@ -10882,10 +10768,7 @@ c ========================= HISTOGRAM (Histog)  =============================
      +histbins+2,histbins+2,qstr,dqfp)
 
 
-
-
         call destroy_particle  !destroy particle this !Tianze 9/10/15 Ref:Emily
-
  
         tmp_part => part !store the location of current(next) particle        
  
@@ -10896,8 +10779,8 @@ c ========================= HISTOGRAM (Histog)  =============================
         !get the initial vertical velocity:
         vinj = ran2(iseed)*Vpmax
         !vinj = Vpmax
-        zv = radius_init
-
+        zv = radius_init !dummy variable, will be replaced by random rp
+        !10/1/2018 Tianze
         call create_particle((/xv,yv,zv/),(/0.0,0.0,vinj/),
      +                     Tbot(1), idx_tmp,procidx_tmp)
               !Tianze 8/13/15 !Brian 7/29/14 Currently ignoring Tp and qinfp
@@ -11922,7 +11805,10 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
   
       !For the channel case, set the total number of particles:
       deltaz = zmax-zmin
-
+      call calc_truc_CDF(rpmin,rpmax)!Defind Sn,Sntruc,CDF
+      call calc_total_tnumpart(massfrac,tnumpart) !assign massfraction
+      if (myid==0) write(*,*) 'Snscl(2)',Snscl !correct
+      if (myid==0) write(*,*)'tnumpart,',tnumpart
 c     tnumpart = 424643 !Tianze 8/27/15 r25p1new !1036730 
       !tnumpart = 2248907
       !tnumpart = 150016
@@ -11985,7 +11871,6 @@ c     Os = 1.093
       
 c     delta_vis = 0.000163 !Bounce at viscous length
 c     radius_init = 25.00e-6 !30.9e-6 !m   !Tianze 8/14/15 !40.6e-6
-c     radius_mass = 25.00e-6 !30.9e-6 !m   !Tianze 8/14/15 !40.6e-6
 c     Sal = 34.0 !PSU ~=gNaCl/kgH2O
 
       end subroutine  thermal_and_part_prop
@@ -12014,11 +11899,12 @@ c     real :: EFFc,EFFs,ep,ef,Lv
       !Also assign the x,y,z max and mins to track particles leaving
       call set_bounds
 
-      Vpmax = 0.089595 !Tianze 9/11/15
+c     Vpmax = 0.089595 !Tianze 9/11/15
       
 
-      m_s = Sal/1000.0*4.0/3.0*pi*radius_mass**3*rhow
-
+c      m_s = Sal/1000.0*4.0/3.0*pi*radius_mass**3*rhow
+c      no longer applied to poly-dispersed case, as init rp changes
+c      9/30/2018 Tianze
 
       !to calculate qstar
 c     ef = 610.94*EXP(17.6257*28/(28+243.04)) !Tianze Hardcoding 11/1/17
@@ -12480,8 +12366,8 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       real :: rhop
 
 
-
-      rhop = (m_s+4.0/3.0*pi*part%radius**3*rhow)/
+         m_s = Sal/1000.0*4.0/3.0*pi*part%rp_init**3*rhow !mass of salt
+         rhop = (m_s+4.0/3.0*pi*part%radius**3*rhow)/
      +                           (4.0/3.0*pi*part%radius**3)
 
 
@@ -12595,7 +12481,8 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       wty = (1.0 - abs(part%xp(2)-yv)/dy)
       wtz = (1.0 - abs(part%xp(3)-zv)/dzu(kpt+1))
       wtt = wtx*wty*wtz
-
+      
+      !m_s updated in subroutine particle_stats
       rhop = (m_s+pi2*2.0/3.0*part%radius**3*rhow)/
      +                           (pi2*2.0/3.0*part%radius**3)
       partmass = rhop*2.0/3.0*pi2*(part%radius)**3
@@ -13603,8 +13490,8 @@ c    !!! 2-D Histograms
      +         zi, zl, zw1
 
         ! 11 params for BCs and ICs
-        namelist /BCsICs/ grav,t00,fcor,dtdzf,zo,ugcont,vgcont,tnumpart,
-     +                  part_grav,u_geo,v_geo
+        namelist /BCsICs/ grav,t00,fcor,dtdzf,zo,ugcont,vgcont,massfrac,
+     +                  part_grav,Vpmax,u_geo,v_geo
 
         ! 11 path names
         namelist /path_names/ path_seed,path_part,path_res,
@@ -13613,7 +13500,7 @@ c    !!! 2-D Histograms
 
         ! 18 material properties +3 9/25/18
         ! CppCpa is calculated in this file later
-        namelist /constants/ radius_init,radius_mass,rhow,nuf,
+        namelist /constants/ radius_init,rhow,nuf,
      +         Cpp,Cpa,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os,
      +         Sal,Ms,delta_vis,Nrp,rpmax,rpmin
         ! 25 params for partical statistics for PDF
@@ -13650,40 +13537,81 @@ c    !!! 2-D Histograms
 
 
        !Calculate dependent inputs
+       !constant
        CpaCpp = Cpa/Cpp
-       mvz1=4.0/3.0*pi*radius_mass**3*rhow*dwp1
-       mvz2=4.0/3.0*pi*radius_mass**3*rhow*dwp2
-       mvx1=4.0/3.0*pi*radius_mass**3*rhow*dup1
-       mvx2=4.0/3.0*pi*radius_mass**3*rhow*dup2
+       !PDF limits
+       mvz1=4.0/3.0*pi*rpmin**3*rhow*dwp1
+       mvz2=4.0/3.0*pi*rpmax**3*rhow*dwp2
+       mvx1=4.0/3.0*pi*rpmin**3*rhow*dup1
+       mvx2=4.0/3.0*pi*rpmax**3*rhow*dup2
        hmax2=zl
        end
 
-        subroutine create_random_partsize(rpmin1,rpmax1,rpran1)
+
+
+
+
+
+        function SSGF0(rp0)
+        ! UNSCALED SSGF, NOT REAL BUT SIMILAR DENSITY
+        ! GIVEN MASS FRACTION TO SAMPLE FROM THE DENSITY
+        real,intent(in) :: rp0
+        real :: SSGF0
+        
+        SSGF0 = 1.0 !not scaled yet 
+
+        end function
+         function SSGF1(rp0)
+        ! UNSCALED SSGF, NOT REAL BUT SIMILAR DENSITY
+        ! GIVEN MASS FRACTION TO SAMPLE FROM THE DENSITY
+        real,intent(in) :: rp0
+        real :: SSGF1
+        
+        SSGF1 = -log(rp0**3) ! for example
+
+        end function
+         function SSGF2(rp0)
+        ! UNSCALED SSGF, NOT REAL BUT SIMILAR DENSITY
+        ! GIVEN MASS FRACTION TO SAMPLE FROM THE DENSITY
+        real,intent(in) :: rp0
+        real :: SSGF2
+        
+        SSGF2 = rp0**(-2) 
+
+        end function
+        
+
+
+        subroutine calc_truc_CDF(rpmin1,rpmax1)
         use pars
         use fields
         use con_data
-        use con_stats
         use particles
- 
         real,intent(in) :: rpmax1,rpmin1
-        real,intent(out) :: rpran1
-        real,allocatable :: Sn(:)
-        real,allocatable :: Snscl(:),rpcrop(:),CDF(:)
+        real,allocatable :: rpinit(:)
+        !Sn,Snscl,rpcrop,CDF are global variables
         integer :: irpmax,irpmin
-        integer :: n,j
-        real,dimension(800):: rpinit
-        real :: ran2
+        integer :: m,n,i,j
+        real :: SSGF,SSGF0,SSGF1,SSGF2ran2
+        m=800 !sample radius size
+        allocate(rpinit(m))
         rpinit(1)=0.0
-        rpinit(2:800) = (/((5e-7*i),i=1,799)/)
-        allocate(Sn(size(rpinit)))
+        rpinit(2:m) = (/((5e-7*i),i=1,799)/)
+        allocate(Sn(m))
         !non-scaled SSGF
-        if (iSSGF .eq. 0) then
-        Sn = 1 !not scaled yet 
-        else if (iSSGF .eq. 1) then
-        Sn = exp(-0.03*rpinit) ! for example
-        else if (iSSGF .eq. 2) then
-        Sn = log(0.02+rpinit) 
+        do i=1,m
+        if (iSSGF==0) then
+        SSGF=SSGF0(rpinit(i))
+        else if (iSSGF==1) then
+        SSGF=SSGF1(rpinit(i))
+        else if (iSSGF==2) then
+        SSGF=SSGF2(rpinit(i))
         end if
+        Sn(i)=SSGF
+        end do
+        if (myid==0) write(*,*)'iSSGF,',iSSGF
+        if (myid==0) write(*,*)'rpinit(2),',rpinit(2)
+        if (myid==0) write(*,*)'Sn(2),',Sn(2)
         
         ! find index for useful range
         irpmax=minloc(rpinit,DIM=1,MASK=(rpinit>=rpmax1))
@@ -13692,10 +13620,91 @@ c    !!! 2-D Histograms
         n=size(Sn(irpmin:irpmax))
         allocate(Snscl(n),rpcrop(n),CDF(n))
         rpcrop=rpinit(irpmin:irpmax)
+        if (myid==0) write(*,*)'rpcrop(2),',rpcrop(2)
         Snscl=Sn(irpmin:irpmax)/sum(Sn(irpmin:irpmax))
+        if (myid==0) write(*,*)'sumSncrop,',sum(Sn(irpmin:irpmax))
+        if (myid==0) write(*,*)'Sn,',Sn
         CDF(1) = Snscl(1)
         do j=2,n
         CDF(j)=CDF(j-1)+Snscl(j) 
         end do
+        end
+
+
+        subroutine create_random_partsize(rpmin1,rpmax1,rpran1)
+        use pars
+        use fields
+        use con_data
+        use con_stats
+        use particles
+c
+c       real,intent(in) :: rpmax1,rpmin1
+        real,intent(out) :: rpran1
+c       real,allocatable :: rpinit(:)
+c       !Sn,Snscl,rpcrop,CDF are global variables
+c       integer :: irpmax,irpmin
+c       integer :: m,n,i,j
+        real :: ran2
+c       real :: SSGF,ran2
+c       m=800 !sample radius size
+c       allocate(rpinit(n))
+c       rpinit(1)=0.0
+c       rpinit(2:800) = (/((5e-7*i),i=1,799)/)
+c       allocate(Sn(size(rpinit)))
+c       !non-scaled SSGF
+c       do i=1,n
+c       Sn(i)=SSGF(rpinit(i))
+c       end do
+c       
+c       ! find index for useful range
+c       irpmax=minloc(rpinit,DIM=1,MASK=(rpinit>=rpmax1))
+c       irpmin=maxloc(rpinit,DIM=1,MASK=(rpinit<=rpmin1))
+c       ! now scale the SSGF
+c       n=size(Sn(irpmin:irpmax))
+c       allocate(Snscl(n),rpcrop(n),CDF(n))
+c       rpcrop=rpinit(irpmin:irpmax)
+c       Snscl=Sn(irpmin:irpmax)/sum(Sn(irpmin:irpmax))
+c       CDF(1) = Snscl(1)
+c       do j=2,n
+c       CDF(j)=CDF(j-1)+Snscl(j) 
+c       end do
         rpran1=rpcrop(minloc(CDF,DIM=1,MASK=(CDF>=ran2(iseed))))
-        end  
+        end 
+
+        subroutine calc_total_tnumpart(massfrac1,tnumpart1)
+        use pars
+        use fields
+        use con_data
+        use particles
+        implicit none
+        real,intent(in) :: massfrac1
+        integer,intent(out) :: tnumpart1
+        real :: totnumflx,volfrac,hrzarea,dmnvol,massflx,volflx
+        integer :: i,j,k,m,l,n
+        ! area and volume for the domain
+        hrzarea=xl*yl
+        dmnvol=xl*yl*zl
+        ! get total num flx based unscaled source dencity
+        ! numerical integration
+        n=size(Snscl)
+        if (myid==0) write(*,*)'size(Snscl),',n
+        totnumflx=Snscl(1)
+        volflx=4/3*pi*rpcrop(1)*Snscl(1)
+        massflx=(4/3*pi*rpcrop(1)**3*rhow)*Snscl(1)
+        do i = 2,n
+        totnumflx = totnumflx + Snscl(i) !# particles unit area unit time
+        volflx=volflx+4/3*pi*rpcrop(i)**3*Snscl(i)
+        massflx=massflx+(4/3*pi*rpcrop(i)**3*rhow)*Snscl(i)
+        end do
+c       if (myid==0) write(*,*)'rpcrop(20),',rpcrop(20)!correct
+        if (myid==0) write(*,*)'totnumflx,',totnumflx
+        if (myid==0) write(*,*)'volflx,',volflx
+        if (myid==0) write(*,*)'massflx,',massflx
+        if (myid==0) write(*,*)'dmnvol,',dmnvol
+        if (myid==0) write(*,*)'massfrac,',massfrac
+        
+        tnumpart1=int(massfrac*(rhoa*dmnvol)/(massflx/totnumflx))
+        if (myid==0) write(*,*)'tnumpart1,',tnumpart1
+              
+        !phi*mair/(massflx per production)
+        end 
