@@ -1,6 +1,8 @@
 c     ----------------------------------------------------------------------
       module pars
 c     ----------------------------------------------------------------------
+      ! Time step
+      integer :: it
       ! In params.in 
       integer :: 
      +     iti,itmax, imean, ihst,itape,
@@ -222,6 +224,7 @@ c     =========== SET HISTOGRAM PARAMETERS  (Histog)
       real :: hist2D_qpdqfp(histbins+2,histbins+2)
         
 c     update on 10/18/2017
+c     real :: pstat(itape,20,16)
      
 c     =========== Particle Type ===========
       !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
@@ -730,7 +733,6 @@ c
  9000 continue
       call set_sav(it,iti)
       if (myid==0) then
-      write(*,*) 'Starting time loop'
       write(*,*) 'it,time = ',it,time
       end if
 
@@ -1314,19 +1316,20 @@ c
 
       return
       end
-      subroutine setup(it)
+      subroutine setup(it1)
 c
       use pars
       use fields
       use fftwk
       use con_data
       use con_stats
+      integer,intent(inout) :: it1
 c
-      it = iti
+      it1 = iti
 c
 c ------------ turn on new sgs model at a particular step
 c
-      if(it .ge. new_vis .and. ivis0 .eq. 1) then
+      if(it1 .ge. new_vis .and. ivis0 .eq. 1) then
           ivis = 1
       else
           ivis = 0
@@ -1338,14 +1341,14 @@ c
             write(6,510)
             write(6,520) wtsfc(1),utau,amonin,dtdzf(1),zody,zo
      +            ,cdbtm,ugcont
-            call print(6,it,1,nnz)
+            call print(6,it1,1,nnz)
          endif
           if(l_debug) then
             write(nprt,6)iti,utau,tsfcc(1) ,qstar(1)
             write(nprt,510)
             write(nprt,520) wtsfc(1),utau,amonin,dtdzf(1),zody,zo
      +            ,cdbtm,ugcont
-            call print(nprt,it,izs,ize)
+            call print(nprt,it1,izs,ize)
           endif
       endif
 c     if(ifilt.eq.1)call filter
@@ -1557,7 +1560,7 @@ c
 c
       return
       end
-      subroutine iso(it)
+      subroutine iso(it1)
 c
       use pars
       use fields
@@ -1567,6 +1570,7 @@ c
       include 'mpif.h'
 c
       real sfk(1:nnz)
+      integer,intent(inout) :: it1
 c
 c ---- get isotropy factor and scale it to match at the matching
 c      height. uses boundary conditions from lower and upper. 
@@ -1675,7 +1679,7 @@ c     write(nprt,3001) (iz,dfac(iz),iz=1,nnz)
  3001 format(' iz ',5x,' dfac ',/,(i5,e15.6))
       return
       end
-      subroutine surfvis(it)
+      subroutine surfvis(it1)
 c
       use pars
       use fields
@@ -1683,6 +1687,7 @@ c
       use con_data
       use con_stats
       include 'mpif.h'
+      integer,intent(in) :: it1
       real xkvis(nnx,iys:iye), alwk(nnx,iys:iye)
 c
       real send(3), buf(3)
@@ -1704,9 +1709,9 @@ c     xkmax  = dzdz/dt/5.
 c     xkmax  = dzu(izp1)*dzu(izp1)/(5.0*dt)
       dz_i = dzu_i(izp1)
       if(iocean .eq. 1) then
-         call sufto(it)
+         call sufto(it1)
       else
-         call suft(it)
+         call suft(it1)
       endif
       if(qstar(1) .eq. 0.) then
          zeta = 0.0
@@ -1809,7 +1814,7 @@ c
 c
       return
       end
-      subroutine comp1(istep,it)
+      subroutine comp1(istep,it1)
 c
 c ----- 3-order runge-kutta time stepping and monotone scalar fluxes in x,y,z.
 c       designed to use mpi in x & y directions.
@@ -1820,6 +1825,7 @@ c
       use con_data
       use con_stats
       include 'mpif.h'
+      integer,intent(in) :: it1
       integer istatus(mpi_status_size)
 c
       parameter(js = 6, ns = 3, nstat = js + ns*nscl)
@@ -1866,7 +1872,7 @@ c -------- evaluate rhs of scalar equations
 c
       do l=1,nscl
          !call rhs_scl(istep,l,it) 
-         call rhs_scl_dns(istep,l,it) 
+         call rhs_scl_dns(istep,l,it1) 
       enddo
 c
 c ---------- gather stat sums on root processor
@@ -3394,7 +3400,7 @@ c
 c
       return
       end
-      subroutine lower(it)
+      subroutine lower(it1)
 c
 c ------ setup lower boundary condition for entire plane at (iz = 1)
 c        using either businger or large formulas with wind.
@@ -3405,6 +3411,7 @@ c
       use fftwk
       use con_data
       use con_stats
+      integer,intent(in) :: it1
       real sfc_flx(2+nscl)
 c
       iz   = 1
@@ -3421,7 +3428,7 @@ c
       enddo
 c
       if(iocean .eq. 1) then
-         call sufto(it)
+         call sufto(it1)
          do iy=iys,iye
          do ix=1,nnx
             tau13m(ix,iy) = -au13m
@@ -3438,7 +3445,7 @@ c
 c
       else
 c
-         call suft(it)
+         call suft(it1)
          fac = -utau**2/(windm*sqrt(u1xy**2 + v1xy**2))
          do iy=iys,iye
          do ix=1,nnx
@@ -3669,7 +3676,7 @@ c                 = 1, specified surface temperature (tsfcc)
       enddo
 
       end subroutine upper_dns
-      subroutine lower_free(it)
+      subroutine lower_free(it1)
 c
 c --------------- setup lower boundary condition for free
 c                 convection where each processor applies
@@ -3684,6 +3691,7 @@ c
       use con_stats
       include 'mpif.h'
 c
+      integer,intent(in) :: it1
       real u_level1(nnx,iys:iye,2+nscl), buf(2+2*nscl)
       real sbuf(2+2*nscl,mxs:mxe,iys:iye)
       real rbuf((2+2*nscl)*nnx*(iye+1-iys))
@@ -3714,7 +3722,7 @@ c
 c
 c --------- every task gets their own fluxes and surface scalars
 c
-      call suft2(u_level1,it)
+      call suft2(u_level1,it1)
 c
 c --------- send surface scalars and momentum fluxes
 c           back to root(s)
@@ -5149,7 +5157,7 @@ c                              use convective limit for scalars
                             endif
        return
        end
-      subroutine suft(it)
+      subroutine suft(it1)
 c
 c ---------- iterate for zeta = z/L using bisection method
 c            either businger or large functions can be specified
@@ -5161,6 +5169,7 @@ c
       use fields
       use con_data
       use con_stats
+      integer,intent(inout) :: it1
       real buf(3+nscl)
 c
       parameter (iter_mo = 30, zeta_min = -6.0, zeta_max = 3.0)
@@ -5345,12 +5354,13 @@ c
       call mpi_finalize(ierr)
       stop
       end
-      subroutine sufto(it)
+      subroutine sufto(it1)
 c
       use pars
       use fields
       use con_data
       use con_stats
+      integer,intent(in) :: it1
       real buf(3+nscl)
 c
 c ------- version of similarity theory adpated for ocean flows
@@ -5426,7 +5436,7 @@ c **** save old utau
           zeta   = z1_a/amonin
       endif
       if (t10xy(1).lt.0. .and. qstar(1) .lt. 0.) then
-         write(6,1234)u1xy,v1xy,t1xy(1),tsfcc(1),amonin,utau,it
+         write(6,1234)u1xy,v1xy,t1xy(1),tsfcc(1),amonin,utau,it1
  1234    format(' ** check sfc u=',e12.3,' v=',e12.3,' t,ts=',2f10.3,
      +     ' l=',e12.3,' u*=',e12.3,' at it=',i5)
          go to 9999
@@ -5496,13 +5506,14 @@ c
       call mpi_finalize(ierr)
       stop
       end
-      subroutine suft2(u_level1,it)
+      subroutine suft2(u_level1,it1)
 c
       use pars
       use fields
       use con_data
       use con_stats
 c
+      integer,intent(in) :: it1
       real u_level1(nnx,iys:iye,2+nscl)
 c
 c     u_level1(.,.,1) = u
@@ -5545,7 +5556,7 @@ c
       utau2    = utau*utau
       amonin   = -utau2*utau/(batagk*qstar(1))
       if(amonin.eq.0.) then
-            write(6,5050) ix,iy,it,utau,amonin
+            write(6,5050) ix,iy,it1,utau,amonin
  5050       format(' 5050, sr. suft2, trouble at ',/,
      +             ' ix = ',i6,'iy = ',i6,' it = ',i6,' utau = ',e15.6,
      +             ' amonin = ',e15.6)
@@ -6972,48 +6983,49 @@ c
 c
       return
       end
-      subroutine set_sav(it,istart)
+      subroutine set_sav(it1,istart)
 c
       use pars
       use fields
       use con_data
       use con_stats
 c
+      integer,intent(inout) :: it1
       data ionce /0/
       save ionce
 c
-      if(it .ne. istart) then
+      if(it1.ne. istart) then
 c
 c ------------------- increment time if not first time through
 c
          time=time+dt
       endif
 c
-      it=it+1
+      it1=it1+1
 c
       dt    = dt_new
       dtg   = dt
-      mnout = (mod(it,imean).eq.0).or. (it.eq.1)
-      mtape = (mod(it,itape).eq.0)
-      micut = (mod(it,itcut).eq.0)
-      mviz  = (mod(it,i_viz).eq.0)
+      mnout = (mod(it1,imean).eq.0).or. (it1.eq.1)
+      mtape = (mod(it1,itape).eq.0)
+      micut = (mod(it1,itcut).eq.0)
+      mviz  = (mod(it1,i_viz).eq.0)
       if(ihst .lt. 0) then
          mhis = .false.
       else
-         mhis = (mod(it,ihst).eq.0 .and. it .ge. it_his)
+         mhis = (mod(it1,ihst).eq.0 .and. it1 .ge. it_his)
       endif
-       mtrans = (mod(it+1,ihst).eq.0)
+       mtrans = (mod(it1+1,ihst).eq.0)
 
       if (i_viz .lt. 0) then
          msave_v = .false.
       else
-         msave_v = (mod(it,i_viz).eq.0 .and. it .ge. it_viz)
+         msave_v = (mod(it1,i_viz).eq.0 .and. it1 .ge. it1_viz)
       endif
 c
 c ---------- decide whether velocity fields are saved
 c
       msave = .false.
-      if(it .ge. itstr .and. mtape) then
+      if(it1 .ge. itstr .and. mtape) then
          itn=itn+1
          msave = .true.
          call get_output_filenames
@@ -7029,15 +7041,15 @@ c
       !      call open_viz
       !   endif
       !endif
-      if((i_viz .gt. 0) .and. (it .ge. it_viz_nxt)) then
-        call viz_output_filename(it)
+      if((i_viz .gt. 0) .and. (it1 .ge. it_viz_nxt)) then
+        call viz_output_filename(it1)
         it_viz_nxt = it_viz_nxt + itape
       endif
 c
 c --------- decide whether history files are to be saved
 c
-      if((ihst .gt. 0) .and. (it .ge. it_his_nxt)) then
-         call open_his(it)
+      if((ihst .gt. 0) .and. (it1 .ge. it_his_nxt)) then
+         call open_his(it1)
          it_his_nxt = it_his_nxt + itape
       endif
 c
@@ -7230,7 +7242,7 @@ c
 c
       return
       end
-      subroutine print(lu,it,iz_strt,iz_end)
+      subroutine print(lu,it1,iz_strt,iz_end)
 c
       use pars
       use fields
@@ -7238,9 +7250,10 @@ c
       use con_data
       use con_stats
 c
+      integer,intent(in) :: it1
       write(lu,4000)
  4000 format(30X,' --- SOLUTION ---')
-      write(lu,4100) it,time,dt,zi,tsfcc(1),uwsfc,vwsfc,wtsfc(1),
+      write(lu,4100) it1,time,dt,zi,tsfcc(1),uwsfc,vwsfc,wtsfc(1),
      +              zol,hol,ucfl, vcfl, wcfl,
      +              t_ref
  4100 format(' IT=',I7,5x,'TIME (s) = ',e15.8,',  DT(s) = ',e15.6,/,
@@ -8656,7 +8669,7 @@ c ---------------------
  4013 format('    after restart qstar = ',e15.6,' nmatch = ',i5,
      +       ' case = ',a3)
       end
-      subroutine save_viz(it)
+      subroutine save_viz(it1)
 c
 c --------------- save multiple (x-y), (x-z), (y-z), planes of data .
 c                 modify recl in all open statements for more or less
@@ -8678,6 +8691,7 @@ c
 #endif
       include 'mpif.h'
 c
+      integer,intent(in) :: it1
       parameter(nvar_o = 6)
 c
       integer ix_pick(maxnx),  iy_pick(maxny),  iz_pick(maxnz), 
@@ -9032,7 +9046,7 @@ c
 c
       return
       end
-      subroutine save_v(it)
+      subroutine save_v(it1)
 c
 c --------------- save 3d fields
 c
@@ -9042,6 +9056,7 @@ c
       use module_byteswap
 #endif
       include 'mpif.h'
+      integer,intent(in) :: it1
       logical there
 c
       integer status(mpi_status_size), ierr
@@ -9116,7 +9131,7 @@ c
             call mpi_finalize(ierr)
             stop
          endif
-         write(6,7000) it,path_sav_v
+         write(6,7000) it1,path_sav_v
       endif
 c
       deallocate(temp)
@@ -9136,7 +9151,7 @@ c --------------------
  8000 format(' in SAVE_V: trouble writing file ',i5,'  myid = ',i5,
      +       ' at iz = ',i5)
       end
-      subroutine save_c(it)
+      subroutine save_c
 c
 c --------------- root process writes constant file
 c                 sequential fortan binary
@@ -10265,7 +10280,7 @@ c
       return
       end
 
-      subroutine particle_update_rk3(it,istage)
+      subroutine particle_update_rk3(it1,istage)
       use pars
       use particles
       use con_data
@@ -10273,7 +10288,7 @@ c
       implicit none
       include 'mpif.h'
 
-      integer :: istage,ierr,it
+      integer :: istage,ierr,it1
       real :: g(3)
       !real :: g(3) = (/0.0, 0.0, 0.0/)
       real :: denom,dtl,sigma,ttest
@@ -10338,7 +10353,7 @@ c         pcount = 0
          call uf_interp     
 
 
-         if (it .LE. 1 ) then 
+         if (it1 .LE. 1 ) then 
             !part%xrhs(1:3) = part%vp(1:3)
             !part%xp(1:3) = xtmp(1:3) + dt*gama(istage)*part%xrhs(1:3)
             part%vp(1:3) = part%uf
@@ -13750,6 +13765,16 @@ c       if (myid==0) write(*,*)'rpcrop(20),',rpcrop(20)!correct
               
         !phi*mair/(massflx per production)
         end
+
+        subroutine record_pstat
+        use pars
+        use particles
+        use fields
+        use con_data
+c       integer :: icpu
+        
+        end
+
 
 c       subroutine sav_part_statsi(pidx1,procidx1)
 c       use pars
