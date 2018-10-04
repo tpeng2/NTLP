@@ -96,7 +96,7 @@ c     ----------------------------------------------------------------------
      +     path_v, path_c, path_p, path_h,
      +     path_sav_v, path_sav_c, 
      +     path_sav_p, path_sav_h, path_sav_part,
-     +     path_hist, path_sav_hist,
+     +     path_hist, path_sav_hist,path_pstat,
      +     bad_news
       character case_inp*3
       character*80 path_viz_xy, path_viz_xz, path_viz_yz, path_stuf,
@@ -151,7 +151,7 @@ c     ----------------------------------------------------------------------
       real :: radius_init,rhow,nuf,rpmax,rpmin,Vpmax,part_grav  
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os
       real :: m_s,Sal,Ms,delta_vis 
-      integer :: Nrp !total number of size classes 9/25/18 
+      integer,parameter :: Nrp=25 !total number of size classes 9/25/18 
       !For statistics, bins bounds 11/1/17
       real :: tL1,tL2,dTp1,dTp2,drp1,drp2
       real :: dup1,dup2,dvp1,dvp2,dwp1,dwp2
@@ -160,6 +160,13 @@ c     ----------------------------------------------------------------------
       real :: Tf1,Tf2,qstr1,qstr2,qinf1,qinf2
       real :: hmax1,hmax2
 
+      !For statistics, dynamic particle range  10/3/18
+      real :: tLmin,tLmax,dTpmin,dTpmax,drpmin,drpmax
+      real :: dupmin,dupmax,dvpmin,dvpmax,dwpmin,dwpmax
+      real :: mvzmin,mvzmax,mvxmin,mvxmax
+      real :: dTfpmin,dTfpmax,dqfpmin,dqfpmax,Tpmin,Tpmax
+      real :: Tfmin,Tfmax,qstrmin,qstrmax,qinfmin,qinfmax
+      real :: hmaxmin,hmaxmax
       ! SSGF for subroutine create_random_radius
       real,allocatable :: Sn(:)
       real,allocatable :: Snscl(:),rpcrop(:),CDF(:)
@@ -171,7 +178,8 @@ c        subroutine grid.
   
 c     ========== FLAGS OF NULL SIZE =========   !Tianze 06/06/16
 c        integer :: flag_example = 0
-
+c     =========== SET SIZE CLASS ===========
+      real,dimension(Nrp)::bins_rp,hist_rp,hist_rpinit !Tianze 10/02/18
 c     =========== SET HISTOGRAM PARAMETERS  (Histog)
       integer, parameter :: histbins = 512
       integer :: hist_flag=0
@@ -227,6 +235,11 @@ c     =========== Particle Type ===========
       end type particle
 
       type(particle), pointer :: part,first_particle
+
+c     ---- save particle stat files ----
+        integer :: ipfile,icpu,ipid,ipfblnk
+        character indpfile1*7,indpid*3,indpfile*7
+        character*80 path_pstatfile 
       end module particles
 c     --------------------------------------------------------------------- 
       module tank_pars
@@ -720,7 +733,21 @@ c
       write(*,*) 'Starting time loop'
       write(*,*) 'it,time = ',it,time
       end if
+
       if (ispray==1) then
+c ------------ open particle stat files ------------        
+        path_pstat=path_sav
+        ipfblnk = index(path_pstat,' ')
+        ipfile=71000
+      !open file  
+        write(indpfile1,'(i7.7)') itape*(int(it/itape))+1 !write cpunumber
+        write(indpfile,'(i7.7)') itape*(1+int(it/itape))+1
+        path_pstatfile=path_pstat(1:ipfblnk-1)//'/pstat_'
+     +//indpfile1//'_'//indpfile//'.txt'
+
+        open(unit=ipfile,file=path_pstatfile,
+     +form='formatted',access='sequential')
+c ------------ pstat file opened ---------------------- 
       if (it == 1) numpart = 0
       part => first_particle
       do while (associated(part))
@@ -749,19 +776,27 @@ c
       write(*,'(a7,4e15.6)') 'zpmax2:',time,part%zp_max
       end if
 
-      if (part%pidx == 3 .and. part%procidx == 0) then
-      write(*,'(a7,4e15.6)') 'xp3:  ',time,part%xp(1:3)   
-      write(*,'(a7,4e15.6)') 'vp3:  ',time,part%vp(1:3)
-      write(*,'(a7,4e15.6)') 'uf3:  ',time,part%uf(1:3)
-      write(*,'(a7,4e15.6)') 'Tp3:  ',time,part%Tp
-      write(*,'(a7,4e15.6)') 'Tf3:  ',time,part%Tf
-      write(*,'(a7,4e15.6)') 'rad3: ',time,part%radius 
-      write(*,'(a7,4e15.6)') 'qinf3:',time,part%qinf 
-      write(*,'(a7,4e15.6)') 'qstr3:',time,part%qstar 
-      write(*,'(a7,4e15.6)') 'zpmax3:',time,part%zp_max
-      end if
+c     if (part%pidx == 3 .and. part%procidx == 0) then
+c     write(*,'(a7,4e15.6)') 'xp3:  ',time,part%xp(1:3)   
+c     write(*,'(a7,4e15.6)') 'vp3:  ',time,part%vp(1:3)
+c     write(*,'(a7,4e15.6)') 'uf3:  ',time,part%uf(1:3)
+c     write(*,'(a7,4e15.6)') 'Tp3:  ',time,part%Tp
+c     write(*,'(a7,4e15.6)') 'Tf3:  ',time,part%Tf
+c     write(*,'(a7,4e15.6)') 'rad3: ',time,part%radius 
+c     write(*,'(a7,4e15.6)') 'qinf3:',time,part%qinf 
+c     write(*,'(a7,4e15.6)') 'qstr3:',time,part%qstar 
+c     write(*,'(a7,4e15.6)') 'zpmax3:',time,part%zp_max
+c     end if
 
-
+c     ----- export particle statistics files
+       
+        do icpu = 1,ncpu_s
+        if (part%procidx ==  icpu .and. part%pidx <3) then
+        write(ipfile,*) time,time-part%t_init,part%Tp,part%Tf,
+     +part%rp_init,part%radius,part%xp,part%vp,part%procidx,part%pidx
+        end if
+        end do 
+c ------------------- ending writing particle statistics files
 
       part => part%next
       if (it == 1) numpart = numpart + 1
@@ -853,6 +888,8 @@ c ========================= WRITE HISTOGRAM =======================
         if (msave .and. istage .eq. 1) then
         call write_histograms(it-itape+1)
         call clean_histograms
+c ----------- close pstat file ----------
+       close(ipfile)
         end if
 
 c
@@ -928,6 +965,8 @@ c
 c
 99000 continue
       te_mpi = mpi_wtime()
+
+c
       write(6,9997) (te_mpi - ts_mpi)
  9997 format(' Job Execution Time = ',e15.6)
 c
@@ -935,6 +974,7 @@ c
       call mpi_finalize(ierr)
 c
       stop
+
       end
 
 
@@ -1235,7 +1275,7 @@ c ----------- a full step, at the new time
 c
       etas(4)  =  0.0
 c
-      cfl = 0.80
+      cfl = 0.70
       !cfl = 0.2  !For phi0.25_rho1000_r100_Mun_Tcpl
 c     cfl = 0.50
 c
@@ -10620,7 +10660,9 @@ c  Mono-dispsered or Poly-dispersed radius
       else if(iszcls .eq. 1) then
       call create_random_partsize(rpmin,rpmax,rpran)
       part%radius=rpran
-      if (myid==0) write (*,*) 'rp_ran:',rpran
+      !if (myid==0) write (*,*) 'rp_ran:',rpran
+      else if(iszcls .eq. 2) then
+      
       end if
       part%rp_init = part%radius
       part%xp(3)=part%rp_init  !overwrite zp value, Tianze 10/1/2018
@@ -13502,7 +13544,7 @@ c    !!! 2-D Histograms
         ! CppCpa is calculated in this file later
         namelist /constants/ radius_init,rhow,nuf,
      +         Cpp,Cpa,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os,
-     +         Sal,Ms,delta_vis,Nrp,rpmax,rpmin
+     +         Sal,Ms,delta_vis,rpmax,rpmin
         ! 25 params for partical statistics for PDF
         namelist /PDF/tL1,tL2,dTp1,dTp2,drp1,drp2,dup1,dup2,dvp1,dvp2,
      +         dwp1,dwp2,dTfp1,dTfp2,dqfp1,dqfp2,Tp1,Tp2,
@@ -13707,4 +13749,34 @@ c       if (myid==0) write(*,*)'rpcrop(20),',rpcrop(20)!correct
         if (myid==0) write(*,*)'tnumpart1,',tnumpart1
               
         !phi*mair/(massflx per production)
-        end 
+        end
+
+c       subroutine sav_part_statsi(pidx1,procidx1)
+c       use pars
+c       use particles
+c       use fields
+c       use con_data
+c       integer,intent(in) :: pidx1,procidx1
+c       integer :: ipfile,icpu,ipid,i,j,k
+c       real :: ran2
+c       character indcpu*3,indpid*3,indpfile*5
+c       character*80 path_pstatfile        
+c      path_pstat=path_sav
+c      iblnk = index(path_sav,' ')
+c       ipfile=71000
+c
+c       do icpu = 1,ncpu
+c       if (procidx1 .eq. icpu .and. pidx1 .eq. 0) then
+c       write(indcpu,'(i3.3)') icpu !write cpunumber
+c       path_pstatfile=path_pstat(1:iblnk-1)//'/pstat_cpu_'//
+c    +   indcpu(1:3)//'.txt'
+c       open(unit=ipfile,file=path_pstatfile,
+c    +  form='formatted',access='sequential')
+c       write(ipfile,*) time,time-part%t_init,part%Tp,part%Tf,
+c    +part%rp_init,part%radius
+c       close(ipfile)
+c       ipfile=ipfile+1
+c       end if
+c       
+c       end do
+c       end 
