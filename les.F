@@ -224,7 +224,7 @@ c     =========== SET HISTOGRAM PARAMETERS  (Histog)
       real :: hist2D_qpdqfp(histbins+2,histbins+2)
         
 c     update on 10/18/2017
-c     real :: pstat(itape,20,16)
+      real,allocatable :: pstat(:,:)!dim: (tstep,varnum) 
      
 c     =========== Particle Type ===========
       !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
@@ -239,10 +239,6 @@ c     =========== Particle Type ===========
 
       type(particle), pointer :: part,first_particle
 
-c     ---- save particle stat files ----
-        integer :: ipfile,icpu,ipid,ipfblnk
-        character indpfile1*7,indpid*3,indpfile*7
-        character*80 path_pstatfile 
       end module particles
 c     --------------------------------------------------------------------- 
       module tank_pars
@@ -728,6 +724,7 @@ c
 c --------------- time loop ------------
 c
       !time = 0.37083609E+02
+      allocate(pstat(itape,20))
       tzero = time
       call get_dt
  9000 continue
@@ -737,19 +734,6 @@ c
       end if
 
       if (ispray==1) then
-c ------------ open particle stat files ------------        
-        path_pstat=path_sav
-        ipfblnk = index(path_pstat,' ')
-        ipfile=71000
-      !open file  
-        write(indpfile1,'(i7.7)') itape*(int(it/itape))+1 !write cpunumber
-        write(indpfile,'(i7.7)') itape*(1+int(it/itape))+1
-        path_pstatfile=path_pstat(1:ipfblnk-1)//'/pstat_'
-     +//indpfile1//'_'//indpfile//'.txt'
-
-        open(unit=ipfile,file=path_pstatfile,
-     +form='formatted',access='sequential')
-c ------------ pstat file opened ---------------------- 
       if (it == 1) numpart = 0
       part => first_particle
       do while (associated(part))
@@ -790,15 +774,8 @@ c     write(*,'(a7,4e15.6)') 'qstr3:',time,part%qstar
 c     write(*,'(a7,4e15.6)') 'zpmax3:',time,part%zp_max
 c     end if
 
-c     ----- export particle statistics files
-       
-        do icpu = 1,ncpu_s
-        if (part%procidx ==  icpu .and. part%pidx <3) then
-        write(ipfile,*) time,time-part%t_init,part%Tp,part%Tf,
-     +part%rp_init,part%radius,part%xp,part%vp,part%procidx,part%pidx
-        end if
-        end do 
-c ------------------- ending writing particle statistics files
+c     ----- record particle stats ----- 
+      if (part%pidx==3 .and. myid.le.ncpu_s*2-1) call record_pstat
 
       part => part%next
       if (it == 1) numpart = numpart + 1
@@ -888,10 +865,14 @@ c
       endif
 c ========================= WRITE HISTOGRAM =======================
         if (msave .and. istage .eq. 1) then
+        if (myid==1) write(*,*) 'pstat(2,1,2):',pstat(2,1)
+        if (myid==2) write(*,*) 'pstat(2,5,3):',pstat(2,5)
+        if (myid==4) write(*,*) 'pstat(2,20,5):',pstat(2,20)
         call write_histograms(it-itape+1)
+        call save_pstat
         call clean_histograms
+        call clear_pstat
 c ----------- close pstat file ----------
-       close(ipfile)
         end if
 
 c
@@ -13771,37 +13752,82 @@ c       if (myid==0) write(*,*)'rpcrop(20),',rpcrop(20)!correct
         use particles
         use fields
         use con_data
-c       integer :: icpu
+c     ---- save particle stat files ----
+        integer :: icpu,itline,npfile
+c       character indpfile1*7,indpid*3,indpfile*7
+c       character*80 path_pstatfile 
+        itline=mod(it,itape)
+        npfile=ncpu_s*2
+        if (itline==0) itline=itape
+c       do icpu=1,npfile
+c       if (myid==icpu-1) then
+c       icpu=myid+1
+c       write(*,*) 'icpu:',icpu !tested and working
+        pstat(itline,1)=time
+        pstat(itline,2)=time-part%t_init
+        if (myid==3) write(*,*) 'pstat(it,2,4)',pstat(itline,2)
+        pstat(itline,3:5)=part%xp
+        pstat(itline,6:8)=part%vp
+        pstat(itline,9)=part%Tf
+        pstat(itline,10)=part%Tp
+        pstat(itline,11)=part%qinf
+        pstat(itline,12)=part%qstar
+        pstat(itline,13)=part%radius
+        pstat(itline,14)=part%rp_init
+        pstat(itline,15:17)=part%xrhs
+        pstat(itline,18:20)=part%vrhs
+c       end if
+c       end do
+        end subroutine
         
+        subroutine clear_pstat
+        use pars
+        use particles
+        use fields
+        use con_data
+        pstat(:,:)=0.0
         end
 
 
-c       subroutine sav_part_statsi(pidx1,procidx1)
-c       use pars
-c       use particles
-c       use fields
-c       use con_data
-c       integer,intent(in) :: pidx1,procidx1
-c       integer :: ipfile,icpu,ipid,i,j,k
-c       real :: ran2
-c       character indcpu*3,indpid*3,indpfile*5
-c       character*80 path_pstatfile        
-c      path_pstat=path_sav
-c      iblnk = index(path_sav,' ')
-c       ipfile=71000
-c
-c       do icpu = 1,ncpu
-c       if (procidx1 .eq. icpu .and. pidx1 .eq. 0) then
-c       write(indcpu,'(i3.3)') icpu !write cpunumber
-c       path_pstatfile=path_pstat(1:iblnk-1)//'/pstat_cpu_'//
-c    +   indcpu(1:3)//'.txt'
-c       open(unit=ipfile,file=path_pstatfile,
-c    +  form='formatted',access='sequential')
-c       write(ipfile,*) time,time-part%t_init,part%Tp,part%Tf,
-c    +part%rp_init,part%radius
-c       close(ipfile)
-c       ipfile=ipfile+1
-c       end if
-c       
-c       end do
-c       end 
+
+
+
+
+        subroutine save_pstat
+        use pars
+        use particles
+        use fields
+        use con_data
+c     ---- save particle stat files ----
+        integer :: ipfile,icpu,ipid,ipfblnk,itline,dimpstat(2),npfile
+        character indpfile1*7,indcpu*3,indpfile*7,fmtpstat*10,npstat*2
+        character*80 path_pstatfile 
+ 
+c ------------ pstat file opened ---------------------- 
+        dimpstat=shape(pstat)
+        if (myid==0) write(*,*) dimpstat(1),dimpstat(2)
+        npfile=ncpu_s*2 !16
+        write(npstat,'(i2.2)') dimpstat(2) !dimpstat has ind 0-2 
+        fmtpstat='('//npstat//'e15.6)' !print table format
+        if (myid==0) write(*,*) 'format of pstat:', fmtpstat
+        path_pstat=path_sav
+        ipfblnk = index(path_pstat,' ')
+        ipfile=71000
+        write(indpfile1,'(i7.7)') itape*(int(it/itape)-1)+1 !write cpunumber
+        write(indpfile,'(i7.7)') itape*(int(it/itape))+1
+ 
+        do icpu = 1,npfile  !1-16
+        write(indcpu,'(i3.3)') icpu !write cpunumber
+        path_pstatfile=path_pstat(1:ipfblnk-1)//'/pstat_cpu_'
+     +//indcpu//'_'//indpfile1//'_'//indpfile//'.txt'
+        open(unit=ipfile,file=path_pstatfile,
+     +  form='formatted',access='sequential')
+        if (myid+1 == icpu) then
+        do itline=1,itape
+        write(ipfile,fmtpstat) pstat(itline,:) 
+        end do
+        end if
+        close(ipfile)
+        ipfile=ipfile+1
+        end do
+        end 
