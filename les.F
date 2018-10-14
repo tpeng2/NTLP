@@ -157,7 +157,7 @@ c     ----------------------------------------------------------------------
       !For statistics, bins bounds 11/1/17
       real :: tL1,tL2,dTp1,dTp2,drp1,drp2
       real :: dup1,dup2,dvp1,dvp2,dwp1,dwp2
-      real :: mvz1,mvz2,mvx1,mvx2
+      real :: vpz1,vpz2,vpx1,vpx2
       real :: dTfp1,dTfp2,dqfp1,dqfp2,Tp1,Tp2
       real :: Tf1,Tf2,qstr1,qstr2,qinf1,qinf2
       real :: hmax1,hmax2
@@ -165,7 +165,7 @@ c     ----------------------------------------------------------------------
       !For statistics, dynamic particle range  10/3/18
       real :: tLmin,tLmax,dTpmin,dTpmax,drpmin,drpmax
       real :: dupmin,dupmax,dvpmin,dvpmax,dwpmin,dwpmax
-      real :: mvzmin,mvzmax,mvxmin,mvxmax
+      real :: vpzmin,vpzmax,vpxmin,vpxmax
       real :: dTfpmin,dTfpmax,dqfpmin,dqfpmax,Tpmin,Tpmax
       real :: Tfmin,Tfmax,qstrmin,qstrmax,qinfmin,qinfmax
       real :: hmaxmin,hmaxmax
@@ -181,7 +181,7 @@ c        subroutine grid.
 c     ========== FLAGS OF NULL SIZE =========   !Tianze 06/06/16
 c        integer :: flag_example = 0
 c     =========== SET SIZE CLASS ===========
-      real,dimension(Nrp)::bins_rp,hist_rp,hist_rpinit !Tianze 10/02/18
+c     real,dimension(Nrp)::bins_rp,hist_rp,hist_rpinit !Tianze 10/02/18
 c     =========== SET HISTOGRAM PARAMETERS  (Histog)
       integer, parameter :: histbins = 512
       integer :: hist_flag=0
@@ -193,8 +193,8 @@ c     =========== SET HISTOGRAM PARAMETERS  (Histog)
       real,dimension(histbins+2) :: bins_vpdiff,hist_vpdiff
       real,dimension(histbins+2) :: bins_wpdiff,hist_wpdiff
       !HIST 7-12
-      real,dimension(histbins+2) :: bins_mvz,hist_mvz
-      real,dimension(histbins+2) :: bins_mvx,hist_mvx
+      real,dimension(histbins+2) :: bins_vpz,hist_vpz
+      real,dimension(histbins+2) :: bins_vpx,hist_vpx
       real,dimension(histbins+2) :: bins_dTfp,hist_dTfp
       real,dimension(histbins+2) :: bins_dqfp,hist_dqfp
       real,dimension(histbins+2) :: bins_Tp,hist_Tp
@@ -203,6 +203,8 @@ c     =========== SET HISTOGRAM PARAMETERS  (Histog)
       real,dimension(histbins+2) :: bins_qstr,hist_qstr
       real,dimension(histbins+2) :: bins_qinf,hist_qinf
       real,dimension(histbins+2) :: bins_hpmax,hist_hpmax
+      real,dimension(histbins+2) :: bins_rpend,hist_rpend
+      real,dimension(histbins+2) :: bins_rpinit,hist_rpinit
       
       
       !2D only hist data, bins counted in 1D
@@ -210,18 +212,18 @@ c     =========== SET HISTOGRAM PARAMETERS  (Histog)
       real :: hist2D_tdTp(histbins+2,histbins+2)      
       real :: hist2D_tdrp(histbins+2,histbins+2)
       real :: hist2D_tdTfp(histbins+2,histbins+2)      
-      real :: hist2D_tdqfp(histbins+2,histbins+2)
-      real :: hist2D_tMvz(histbins+2,histbins+2)
-      real :: hist2D_tMvx(histbins+2,histbins+2)
+      real :: hist2D_dTpdrp(histbins+2,histbins+2)
+      real :: hist2D_tvpz(histbins+2,histbins+2)
+      real :: hist2D_tvpx(histbins+2,histbins+2)
       !HIST2D 7-12
       real :: hist2D_thmax(histbins+2,histbins+2)
       real :: hist2D_hdTp(histbins+2,histbins+2)
       real :: hist2D_hdrp(histbins+2,histbins+2)
-      real :: hist2D_hMvz(histbins+2,histbins+2)
-      real :: hist2D_hMvx(histbins+2,histbins+2)
+      real :: hist2D_hvpz(histbins+2,histbins+2)
+      real :: hist2D_hvpx(histbins+2,histbins+2)
       real :: hist2D_TpdTfp(histbins+2,histbins+2)
       !HIST2D 13-
-      real :: hist2D_qpdqfp(histbins+2,histbins+2)
+      real :: hist2D_rpirpe(histbins+2,histbins+2)
         
 c     update on 10/18/2017
       real,allocatable :: pstat(:,:)!dim: (tstep,varnum) 
@@ -10656,7 +10658,7 @@ c  Mono-dispsered or Poly-dispersed radius
       else if(iszcls .eq. 1) then
       call create_random_partsize(rpmin,rpmax,rpran)
       part%radius=rpran
-      !if (myid==0) write (*,*) 'rp_ran:',rpran
+      if (myid==0) write (*,*) 'rp_ran:',rpran
       else if(iszcls .eq. 2) then
       
       end if
@@ -10703,10 +10705,11 @@ c     HISTOGRAM (Histog)
       real :: Tpdiff         !Temperature difference
       real :: rpdiff         !Radius difference
       real :: vpdiff(3)      !Velocity Difference
-      real :: mvz,mvx        !full Momentum, and x-momentum
+      real :: vpz,vpx        !full Momentum, and x-momentum
       real :: dTfp           !Local temperature difference
       real :: dqfp           !Local radius difference
-      real :: Tp,Tf,qstr,qinf,hpmax!particle temperature and humidity
+      real :: Tp,Tf,qstr,qinf,hpmax
+      real :: rpinit,rpend!particle temperature and humidity
       !Assumes domain goes from [0,xl),[0,yl),[0,zl]
       !Also maintain the number of particles on each proc
 c     if (myid==0) write(*,*) 'time,procid: ',time,part%procidx
@@ -10738,16 +10741,18 @@ c     if (myid==0) write(*,*) 'time,xp1: ',time,part%xp(1)
      +(4.0/3.0*pi*part%radius**3)
         tL = tp_end-part%t_init
         Tpdiff = part%Tp-Tinit(1)
-        rpdiff = part%radius - radius_init      
+        rpdiff = part%radius - part%rp_init     
         vpdiff = part%vp -part%vp_init
-        mvz=part%vp(3)*4.0/3.0*pi*part%radius**3.0*rhop
-        mvx=part%vp(1)*4.0/3.0*pi*part%radius**3.0*rhop
+        vpz=part%vp(3)
+        vpx=part%vp(1)
         dTfp   = part%Tf-part%Tp
         dqfp   = part%qinf-part%qstar
         Tp = part%Tp
         Tf = part%Tf
         qstr=part%qstar
         qinf=part%qinf 
+        rpend = part%radius
+        rpinit = part%rp_init
         !find maximum height
         hpmax =part%zp_max
 c     if (part%pidx == 1 .and. part%procidx == 0) then
@@ -10763,8 +10768,8 @@ c ========================= HISTOGRAM (Histog)  =============================
         call add_histogram(bins_vpdiff,hist_vpdiff,histbins+2,vpdiff(2))
         call add_histogram(bins_wpdiff,hist_wpdiff,histbins+2,vpdiff(3))
         !HIST 7-12
-        call add_histogram(bins_mvz,hist_mvz,histbins+2,mvz)
-        call add_histogram(bins_mvx,hist_mvx,histbins+2,mvx)
+        call add_histogram(bins_vpz,hist_vpz,histbins+2,vpz)
+        call add_histogram(bins_vpx,hist_vpx,histbins+2,vpx)
         call add_histogram(bins_dTfp,hist_dTfp,histbins+2,dTfp)
         call add_histogram(bins_dqfp,hist_dqfp,histbins+2,dqfp)
         call add_histogram(bins_Tp,hist_Tp,histbins+2,Tp)
@@ -10773,6 +10778,8 @@ c ========================= HISTOGRAM (Histog)  =============================
         call add_histogram(bins_qstr,hist_qstr,histbins+2,qstr)
         call add_histogram(bins_qinf,hist_qinf,histbins+2,qinf)
         call add_histogram(bins_hpmax,hist_hpmax,histbins+2,hpmax)
+        call add_histogram(bins_rpend,hist_rpend,histbins+2,rpend)
+        call add_histogram(bins_rpinit,hist_rpinit,histbins+2,rpinit)
         
 
         !HIST2D 1-6
@@ -10782,12 +10789,12 @@ c ========================= HISTOGRAM (Histog)  =============================
      +histbins+2,histbins+2,tL,rpdiff) 
         call add_histogram2D(bins_tL,bins_dTfp,hist2D_tdTfp,
      +histbins+2,histbins+2,tL,dTfp)
-        call add_histogram2D(bins_tL,bins_dqfp,hist2D_tdqfp,
-     +histbins+2,histbins+2,tL,dqfp)
-        call add_histogram2D(bins_tL,bins_mvz,hist2D_tMvz,
-     +histbins+2,histbins+2,tL,mvz)
-        call add_histogram2D(bins_tL,bins_mvx,hist2D_tMvx,
-     +histbins+2,histbins+2,tL,mvx)
+        call add_histogram2D(bins_Tpdiff,bins_rpdiff,hist2D_dTpdrp,
+     +histbins+2,histbins+2,Tpdiff,rpdiff)
+        call add_histogram2D(bins_tL,bins_vpz,hist2D_tvpz,
+     +histbins+2,histbins+2,tL,vpz)
+        call add_histogram2D(bins_tL,bins_vpx,hist2D_tvpx,
+     +histbins+2,histbins+2,tL,vpx)
         !HIST2D 7-12
         call add_histogram2D(bins_tL,bins_hpmax,hist2D_thmax,
      +histbins+2,histbins+2,tL,hpmax)
@@ -10795,14 +10802,14 @@ c ========================= HISTOGRAM (Histog)  =============================
      +histbins+2,histbins+2,hpmax,Tpdiff)
         call add_histogram2D(bins_hpmax,bins_rpdiff,hist2D_hdrp,
      +histbins+2,histbins+2,hpmax,rpdiff)
-        call add_histogram2D(bins_hpmax,bins_mvz,hist2D_hMvz,
-     +histbins+2,histbins+2,hpmax,mvz)
-        call add_histogram2D(bins_hpmax,bins_mvx,hist2D_hMvx,
-     +histbins+2,histbins+2,hpmax,mvx)
+        call add_histogram2D(bins_hpmax,bins_vpz,hist2D_hvpz,
+     +histbins+2,histbins+2,hpmax,vpz)
+        call add_histogram2D(bins_hpmax,bins_vpx,hist2D_hvpx,
+     +histbins+2,histbins+2,hpmax,vpx)
         call add_histogram2D(bins_Tp,bins_dTfp,hist2D_TpdTfp,
      +histbins+2,histbins+2,Tp,dTfp)
         !HIST2D 13
-        call add_histogram2D(bins_qstr,bins_dqfp,hist2D_qpdqfp,
+        call add_histogram2D(bins_rpinit,bins_rpend,hist2D_rpirpe,
      +histbins+2,histbins+2,qstr,dqfp)
 
 
@@ -10837,7 +10844,7 @@ c ========================= HISTOGRAM (Histog)  =============================
       call mpi_allreduce(num_reintro,tmp_reintro,1,mpi_integer,mpi_sum,
      +       mpi_comm_world,ierr)
 
-      if (myid==0) write(*,*) 'time,tot_reintro: ',time,tmp_reintro
+      if (myid==0) write(*,*) 'time,tmp_reintro: ',time,tmp_reintro
 
       tot_reintro = tot_reintro + tmp_reintro
 
@@ -11990,8 +11997,8 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       call set_binsdata(bins_vpdiff,histbins+2,dvp1,dvp2)
       call set_binsdata(bins_wpdiff,histbins+2,dwp1,dwp2)
       !HIST 7-12
-      call set_binsdata(bins_mvz,histbins+2,mvz1,mvz2)
-      call set_binsdata(bins_mvx,histbins+2,mvx1,mvx2)
+      call set_binsdata(bins_vpz,histbins+2,vpz1,vpz2)
+      call set_binsdata(bins_vpx,histbins+2,vpx1,vpx2)
       call set_binsdata(bins_dTfp,histbins+2,dTfp1,dTfp2)
       call set_binsdata(bins_dqfp,histbins+2,dqfp1,dqfp2)
       call set_binsdata(bins_Tp,histbins+2,Tp1,Tp2)
@@ -12000,6 +12007,8 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       call set_binsdata(bins_qstr,histbins+2,qstr1,qstr2)
       call set_binsdata(bins_qinf,histbins+2,qinf1,qinf2)
       call set_binsdata(bins_hpmax,histbins+2,hmax1,hmax2)
+      call set_binsdata(bins_rpend,histbins+2,0.6*rpmin,1.1*rpmax)
+      call set_binsdata(bins_rpinit,histbins+2,rpmin,rpmax)
  
 
       if (myid==0) write(*,*) 'Init Particle radius = ',radius_init  !Brian 7/14/14
@@ -12971,8 +12980,8 @@ c       =========== WRITE HISTOGRAMS ==========
         real,dimension(histbins+2) :: sumbuf_vpdiff,binval_vpdiff 
         real,dimension(histbins+2) :: sumbuf_wpdiff,binval_wpdiff 
         !HIST 7-12
-        real,dimension(histbins+2) :: sumbuf_mvz,binval_mvz
-        real,dimension(histbins+2) :: sumbuf_mvx,binval_mvx
+        real,dimension(histbins+2) :: sumbuf_vpz,binval_vpz
+        real,dimension(histbins+2) :: sumbuf_vpx,binval_vpx
         real,dimension(histbins+2) :: sumbuf_dTfp,binval_dTfp
         real,dimension(histbins+2) :: sumbuf_dqfp,binval_dqfp
         real,dimension(histbins+2) :: sumbuf_Tp,binval_Tp
@@ -12981,6 +12990,8 @@ c       =========== WRITE HISTOGRAMS ==========
         real,dimension(histbins+2) :: sumbuf_qstr,binval_qstr
         real,dimension(histbins+2) :: sumbuf_qinf,binval_qinf
         real,dimension(histbins+2) :: sumbuf_hpmax,binval_hpmax
+        real,dimension(histbins+2) :: sumbuf_rpend,binval_rpend
+        real,dimension(histbins+2) :: sumbuf_rpinit,binval_rpinit
 
         !HIST2D 1-6
         real :: sumbuf2D_tdTp(histbins+2,histbins+2)
@@ -12992,14 +13003,14 @@ c       =========== WRITE HISTOGRAMS ==========
         real :: sumbuf2D_tdTfp(histbins+2,histbins+2)
         real :: binval2D_tdTfp(histbins+2,histbins+2)
 
-        real :: sumbuf2D_tdqfp(histbins+2,histbins+2)
-        real :: binval2D_tdqfp(histbins+2,histbins+2)
+        real :: sumbuf2D_dTpdrp(histbins+2,histbins+2)
+        real :: binval2D_dTpdrp(histbins+2,histbins+2)
 
-        real :: sumbuf2D_tMvz(histbins+2,histbins+2)
-        real :: binval2D_tMvz(histbins+2,histbins+2)
+        real :: sumbuf2D_tvpz(histbins+2,histbins+2)
+        real :: binval2D_tvpz(histbins+2,histbins+2)
 
-        real :: sumbuf2D_tMvx(histbins+2,histbins+2)
-        real :: binval2D_tMvx(histbins+2,histbins+2)
+        real :: sumbuf2D_tvpx(histbins+2,histbins+2)
+        real :: binval2D_tvpx(histbins+2,histbins+2)
         !HIST2D 7-12
         real :: sumbuf2D_thmax(histbins+2,histbins+2)
         real :: binval2D_thmax(histbins+2,histbins+2)
@@ -13010,32 +13021,32 @@ c       =========== WRITE HISTOGRAMS ==========
         real :: sumbuf2D_hdrp(histbins+2,histbins+2)
         real :: binval2D_hdrp(histbins+2,histbins+2)
 
-        real :: sumbuf2D_hMvz(histbins+2,histbins+2)
-        real :: binval2D_hMvz(histbins+2,histbins+2)
+        real :: sumbuf2D_hvpz(histbins+2,histbins+2)
+        real :: binval2D_hvpz(histbins+2,histbins+2)
 
-        real :: sumbuf2D_hMvx(histbins+2,histbins+2)
-        real :: binval2D_hMvx(histbins+2,histbins+2)
+        real :: sumbuf2D_hvpx(histbins+2,histbins+2)
+        real :: binval2D_hvpx(histbins+2,histbins+2)
 
         real :: sumbuf2D_TpdTfp(histbins+2,histbins+2)
         real :: binval2D_TpdTfp(histbins+2,histbins+2)
         !HIST2D 13
-        real :: sumbuf2D_qpdqfp(histbins+2,histbins+2)
-        real :: binval2D_qpdqfp(histbins+2,histbins+2)
+        real :: sumbuf2D_rpirpe(histbins+2,histbins+2)
+        real :: binval2D_rpirpe(histbins+2,histbins+2)
 
 
         
-        !file 90000-90008 
+        !file 90000-90009 
         character*80 path_tL, path_Tpdiff, path_rpdiff 
         character*80 path_updiff, path_vpdiff, path_wpdiff 
-        character*80 path_mvz,path_dTfp,path_dqfp  
+        character*80 path_vpz,path_dTfp,path_dqfp,path_rpend 
         !file 91000-91006
         character*80 path2D_tdTp, path2D_tdrp  
-        character*80 path2D_tdTfp,path2D_tdqfp
-        character*80 path2D_tMvz,path2D_tMvx,path2D_thmax 
+        character*80 path2D_tdTfp,path2D_dTpdrp
+        character*80 path2D_tvpz,path2D_tvpx,path2D_thmax 
         !file 91007-91013
         character*80 path2D_hdTp,path2D_hdrp 
-        character*80 path2D_hMvz,path2D_hMvx 
-        character*80 path2D_TpdTfp,path2D_qpdqfp 
+        character*80 path2D_hvpz,path2D_hvpx 
+        character*80 path2D_TpdTfp,path2D_rpirpe 
                 
         character cgrid*10, num*3,iblks*16
         character fmt2D*11, fmt2Dnum*4,fmt2Ds*5
@@ -13050,8 +13061,8 @@ c -------------- record bins for histogram file (1D) -----------
         binval_vpdiff  = bins_vpdiff(:)
         binval_wpdiff  = bins_wpdiff(:)
         !HIST 7-12
-        binval_mvz   = bins_mvz(:)
-        binval_mvx   = bins_mvx(:)
+        binval_vpz   = bins_vpz(:)
+        binval_vpx   = bins_vpx(:)
         binval_dTfp  = bins_dTfp(:)
         binval_dqfp  = bins_dqfp(:)
         binval_Tp    = bins_Tp(:)
@@ -13060,6 +13071,8 @@ c -------------- record bins for histogram file (1D) -----------
         binval_qstr    = bins_qstr(:)
         binval_qinf    = bins_qinf(:)
         binval_hpmax    = bins_hpmax(:)
+        binval_rpend    = bins_rpend(:)
+        binval_rpinit    = bins_rpinit(:)
 c -------------- Collect all histogram from different processors
         !HIST 1-6
         call mpi_reduce(hist_tL(:),sumbuf_tL,histbins+2,
@@ -13075,9 +13088,9 @@ c -------------- Collect all histogram from different processors
         call mpi_reduce(hist_wpdiff(:),sumbuf_wpdiff,histbins+2,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
         !HIST 7-12
-        call mpi_reduce(hist_Mvz,sumbuf_Mvz,histbins+2,
+        call mpi_reduce(hist_vpz,sumbuf_vpz,histbins+2,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
-        call mpi_reduce(hist_Mvx,sumbuf_Mvx,histbins+2,
+        call mpi_reduce(hist_vpx,sumbuf_vpx,histbins+2,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
         call mpi_reduce(hist_dTfp,sumbuf_dTfp,histbins+2,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
@@ -13094,6 +13107,10 @@ c -------------- Collect all histogram from different processors
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
         call mpi_reduce(hist_hpmax,sumbuf_hpmax,histbins+2,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+        call mpi_reduce(hist_rpend,sumbuf_rpend,histbins+2,
+     +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+        call mpi_reduce(hist_rpinit,sumbuf_rpinit,histbins+2,
+     +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
 
 
@@ -13104,11 +13121,11 @@ c -------------- Collect all histogram from different processors
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
         call mpi_reduce(hist2D_tdTfp(:,:),sumbuf2D_tdTfp,
      +  (histbins+2)**2,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
-        call mpi_reduce(hist2D_tdqfp(:,:),sumbuf2D_tdqfp,
+        call mpi_reduce(hist2D_dTpdrp(:,:),sumbuf2D_dTpdrp,
      +  (histbins+2)**2,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
-        call mpi_reduce(hist2D_tMvz(:,:),sumbuf2D_tMvz,(histbins+2)**2,
+        call mpi_reduce(hist2D_tvpz(:,:),sumbuf2D_tvpz,(histbins+2)**2,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
-        call mpi_reduce(hist2D_tMvx(:,:),sumbuf2D_tMvx,(histbins+2)**2,
+        call mpi_reduce(hist2D_tvpx(:,:),sumbuf2D_tvpx,(histbins+2)**2,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
        !HIST2D 7-12
        call mpi_reduce(hist2D_thmax(:,:),sumbuf2D_thmax,(histbins+2)**2,
@@ -13117,14 +13134,14 @@ c -------------- Collect all histogram from different processors
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
         call mpi_reduce(hist2D_hdrp(:,:),sumbuf2D_hdrp,(histbins+2)**2,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
-        call mpi_reduce(hist2D_hMvz(:,:),sumbuf2D_hMvz,(histbins+2)**2,
+        call mpi_reduce(hist2D_hvpz(:,:),sumbuf2D_hvpz,(histbins+2)**2,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
-        call mpi_reduce(hist2D_hMvx(:,:),sumbuf2D_hMvx,(histbins+2)**2,
+        call mpi_reduce(hist2D_hvpx(:,:),sumbuf2D_hvpx,(histbins+2)**2,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
         call mpi_reduce(hist2D_TpdTfp(:,:),sumbuf2D_TpdTfp,
      +   (histbins+2)**2,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
        !HIST2D 13-
-        call mpi_reduce(hist2D_qpdqfp(:,:),sumbuf2D_qpdqfp,
+        call mpi_reduce(hist2D_rpirpe(:,:),sumbuf2D_rpirpe,
      +   (histbins+2)**2, mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
   
 
@@ -13169,7 +13186,7 @@ c
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
  
         !File 90006
-        path_mvz = path_hist(1:iblnk-1)//'/mvz'//
+        path_vpz = path_hist(1:iblnk-1)//'/vpz'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
  
         !File 90007
@@ -13178,6 +13195,10 @@ c
  
         !File 90008
         path_dqfp = path_hist(1:iblnk-1)//'/dqfp'//
+     +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
+
+        !File 90009
+        path_rpend = path_hist(1:iblnk-1)//'/rpend'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
  
 
@@ -13195,15 +13216,15 @@ c
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91003
-        path2D_tdqfp = path_hist(1:iblnk-1)//'/tdqfp_2D'//
+        path2D_dTpdrp = path_hist(1:iblnk-1)//'/dTpdrp_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91004
-        path2D_tMvz = path_hist(1:iblnk-1)//'/tMvz_2D'//
+        path2D_tvpz = path_hist(1:iblnk-1)//'/tMvz_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91005
-        path2D_tMvx = path_hist(1:iblnk-1)//'/tMvx_2D'//
+        path2D_tvpx = path_hist(1:iblnk-1)//'/tMvx_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91006
@@ -13219,11 +13240,11 @@ c
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91009
-        path2D_hMvz = path_hist(1:iblnk-1)//'/hMvz_2D'//
+        path2D_hvpz = path_hist(1:iblnk-1)//'/hvpz_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91010
-        path2D_hMvx = path_hist(1:iblnk-1)//'/hMvx_2D'//
+        path2D_hvpx = path_hist(1:iblnk-1)//'/hvpx_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91011
@@ -13231,7 +13252,7 @@ c
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91012
-        path2D_qpdqfp = path_hist(1:iblnk-1)//'/qpdqfp_2D'//
+        path2D_rpirpe = path_hist(1:iblnk-1)//'/rpirpe_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
 
@@ -13286,10 +13307,10 @@ c ---------------- save data
         end do
         close(90005)
 
-        open (unit=90006,file=path_mvz,
+        open (unit=90006,file=path_vpz,
      +  form='formatted',access='sequential')
-        do i =1,size(sumbuf_mvz)
-           write(90006,'(2e15.6)'),binval_mvx(i), sumbuf_mvx(i) !UPDATE BINV
+        do i =1,size(sumbuf_vpz)
+           write(90006,'(2e15.6)'),binval_vpz(i), sumbuf_vpz(i) !UPDATE BINV
         end do
         close(90006)
 
@@ -13307,6 +13328,12 @@ c ---------------- save data
         end do
         close(90008)
 
+        open (unit=90009,file=path_rpend,
+     +  form='formatted',access='sequential')
+        do i =1,size(sumbuf_rpend)
+           write(90009,'(2e15.6)'),binval_rpend(i), sumbuf_rpend(i) !UPDATE BINV
+        end do
+        close(90009)
 
 c        fmt2D = '(259e15.6)'
 
@@ -13344,35 +13371,35 @@ c    !!! 2-D Histograms
         end do
         close(91002)
  
-        open (unit=91003,file=path2D_tdqfp,
+        open (unit=91003,file=path2D_dTpdrp,
      +  form='formatted',access='sequential')
-        do i=0,size(sumbuf2D_tdqfp,1)
+        do i=0,size(sumbuf2D_dTpdrp,1)
            if (i .eq. 0) then 
            write(91003,fmt2D) 0,binval_dqfp
            else 
-           write(91003,fmt2D),binval_tL(i), sumbuf2D_tdqfp(i,:) !UPDATE BINV
+           write(91003,fmt2D),binval_tL(i), sumbuf2D_dTpdrp(i,:) !UPDATE BINV
            endif 
         end do
         close(91003)
  
-        open (unit=91004,file=path2D_tMvz,
+        open (unit=91004,file=path2D_tvpz,
      +  form='formatted',access='sequential')
-        do i=0,size(sumbuf2D_tMvz,1)
+        do i=0,size(sumbuf2D_tvpz,1)
            if (i .eq. 0) then 
-           write(91004,fmt2D) 0,binval_mvz
+           write(91004,fmt2D) 0,binval_vpz
            else 
-           write(91004,fmt2D),binval_tL(i), sumbuf2D_tMvz(i,:) !UPDATE BINV
+           write(91004,fmt2D),binval_tL(i), sumbuf2D_tvpz(i,:) !UPDATE BINV
            endif 
         end do
         close(91004)
  
-        open (unit=91005,file=path2D_tMvx,
+        open (unit=91005,file=path2D_tvpx,
      +  form='formatted',access='sequential')
-        do i=0,size(sumbuf2D_tMvx,1)
+        do i=0,size(sumbuf2D_tvpx,1)
            if (i .eq. 0) then 
-           write(91005,fmt2D) 0,binval_mvx
+           write(91005,fmt2D) 0,binval_vpx
            else 
-           write(91005,fmt2D),binval_tL(i), sumbuf2D_tMvx(i,:) !UPDATE BINV
+           write(91005,fmt2D),binval_tL(i), sumbuf2D_tvpx(i,:) !UPDATE BINV
            endif 
         end do
         close(91005)
@@ -13410,24 +13437,24 @@ c    !!! 2-D Histograms
         end do
         close(91008) 
 
-        open (unit=91009,file=path2D_hMvz,
+        open (unit=91009,file=path2D_hvpz,
      +  form='formatted',access='sequential')
-        do i=0,size(sumbuf2D_hMvz,1)
+        do i=0,size(sumbuf2D_hvpz,1)
            if (i .eq. 0) then 
-           write(91009,fmt2D) 0,binval_mvz
+           write(91009,fmt2D) 0,binval_vpz
            else 
-           write(91009,fmt2D),binval_hpmax(i), sumbuf2D_hMvz(i,:) !UPDATE BINV
+           write(91009,fmt2D),binval_hpmax(i), sumbuf2D_hvpz(i,:) !UPDATE BINV
            endif 
         end do
         close(91009) 
 
-        open (unit=91010,file=path2D_hMvx,
+        open (unit=91010,file=path2D_hvpx,
      +  form='formatted',access='sequential')
-        do i=0,size(sumbuf2D_hMvx,1)
+        do i=0,size(sumbuf2D_hvpx,1)
            if (i .eq. 0) then 
-           write(91010,fmt2D) 0,binval_mvx
+           write(91010,fmt2D) 0,binval_vpx
            else 
-           write(91010,fmt2D),binval_hpmax(i), sumbuf2D_hMvx(i,:) !UPDATE BINV
+           write(91010,fmt2D),binval_hpmax(i), sumbuf2D_hvpx(i,:) !UPDATE BINV
            endif 
         end do
         close(91010) 
@@ -13444,13 +13471,13 @@ c    !!! 2-D Histograms
         end do
         close(91011)
  
-        open (unit=91012,file=path2D_qpdqfp,
+        open (unit=91012,file=path2D_rpirpe,
      +  form='formatted',access='sequential')
-        do i=0,size(sumbuf2D_qpdqfp,1)
+        do i=0,size(sumbuf2D_rpirpe,1)
            if (i .eq. 0) then 
-           write(91012,fmt2D) 0,binval_dqfp
+           write(91012,fmt2D) 0,binval_rpend
            else 
-           write(91012,fmt2D),binval_qstr(i), sumbuf2D_qpdqfp(i,:) !UPDATE BINV
+           write(91012,fmt2D),binval_rpinit(i), sumbuf2D_rpirpe(i,:) !UPDATE BINV
            endif 
         end do
         close(91012)
@@ -13476,8 +13503,8 @@ c    !!! 2-D Histograms
         hist_vpdiff = 0.0
         hist_wpdiff = 0.0
         !HIST 7-12
-        hist_mvz=0.0
-        hist_mvx=0.0
+        hist_vpz=0.0
+        hist_vpx=0.0
         hist_dTfp=0.0
         hist_dqfp=0.0
         hist_Tp=0.0
@@ -13486,23 +13513,24 @@ c    !!! 2-D Histograms
         hist_qstr=0.0
         hist_qinf=0.0
         hist_hpmax=0.0
-  
+        hist_rpend=0.0  
+        hist_rpinit=0.0  
         !HIST2D 1-6
         hist2D_tdTp(:,:)=0.0
         hist2D_tdrp(:,:)=0.0 
         hist2D_tdTfp(:,:)=0.0 
-        hist2D_tdqfp(:,:)=0.0 
-        hist2D_tMvz(:,:)=0.0 
-        hist2D_tMvx(:,:)=0.0 
+        hist2D_dTpdrp(:,:)=0.0 
+        hist2D_tvpz(:,:)=0.0 
+        hist2D_tvpx(:,:)=0.0 
         !HIST2D 7-12
         hist2D_thmax(:,:)=0.0
         hist2D_hdTp(:,:)=0.0 
         hist2D_hdrp(:,:)=0.0 
-        hist2D_hMvz(:,:)=0.0
-        hist2D_hMvx(:,:)=0.0
+        hist2D_hvpz(:,:)=0.0
+        hist2D_hvpx(:,:)=0.0
         hist2D_TpdTfp(:,:)=0.0 
         !HIST2D 13
-        hist2D_qpdqfp(:,:)=0.0 
+        hist2D_rpirpe(:,:)=0.0 
 
         end subroutine clean_histograms
 
@@ -13578,10 +13606,10 @@ c    !!! 2-D Histograms
        !constant
        CpaCpp = Cpa/Cpp
        !PDF limits
-       mvz1=4.0/3.0*pi*rpmin**3*rhow*dwp1
-       mvz2=4.0/3.0*pi*rpmax**3*rhow*dwp2
-       mvx1=4.0/3.0*pi*rpmin**3*rhow*dup1
-       mvx2=4.0/3.0*pi*rpmax**3*rhow*dup2
+       vpz1=dwp1
+       vpz2=dwp2
+       vpx1=dup1
+       vpx2=dup2
        hmax2=zl
        end
 
