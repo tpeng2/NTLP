@@ -1,0 +1,31 @@
+#!/bin/bash
+
+#$ -M tpeng2@nd.edu
+#$ -m abe
+#$ -pe mpi-16 64
+#$ -q *@@richter
+#$ -N unifsmph1
+#$ -j y
+
+case=unifsmph1
+time=0000000
+runout=$case.out.$time
+
+datadir=/scratch365/tpeng2/NTLP/$case
+homedir=~/Research/NTLP/$case
+
+mkdir $datadir
+
+cd $homedir
+
+module load mvapich2
+module load intel
+
+imachine=0
+echo $imachine > ./mach.file
+echo $datadir >> ./mach.file
+
+mpirun -n 64 $homedir/../build/lesmpi.a $homedir/params.in > $datadir/$runout
+
+
+
