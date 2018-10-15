@@ -10661,7 +10661,8 @@ c  Mono-dispsered or Poly-dispersed radius
       part%radius=rpran
       if (myid==0) write (*,*) 'rp_ran:',rpran
       else if(iszcls .eq. 2) then
-      
+      call create_random_partsize(rpmin,rpmax,rpran)
+      call regularize_rpinit(rpran,part%radius) 
       end if
       part%rp_init = part%radius
       part%xp(3)=part%rp_init  !overwrite zp value, Tianze 10/1/2018
@@ -13670,10 +13671,10 @@ c    !!! 2-D Histograms
         integer :: irpmax,irpmin
         integer :: m,n,i,j
         real :: SSGF,SSGF0,SSGF1,SSGF2ran2
-        m=800 !sample radius size
+        m=1200 !sample radius size
         allocate(rpinit(m))
         rpinit(1)=0.0
-        rpinit(2:m) = (/((5e-7*i),i=1,799)/)
+        rpinit(2:m) = (/((5e-7*i),i=1,m-1)/) !from 0 to m*0.5 um
         allocate(Sn(m))
         !non-scaled SSGF
         do i=1,m
@@ -13870,3 +13871,34 @@ c ------------ pstat file opened ----------------------
         ipfile=ipfile+1
         end do
         end 
+
+        subroutine regularize_rpinit(rpran1in,rpran1out)
+        use pars
+        use particles
+        use fields
+        use con_data
+
+        real,intent(in):: rpran1in
+        real,intent(out) :: rpran1out 
+        real,dimension(Nrp) :: szcls1,szcls2,dszcls !index starts from 1
+        integer :: indszcls
+        
+        szcls1=(/20.0E-6,25.0E-6,30.0E-6,35.0E-6,40.0E-6,
+     +        45.0E-6,50.0E-6,55.0E-6,60.0E-6,70.0E-6,
+     +        80.0E-6,90.0E-6,100.0E-6,115.0E-6,130.0E-6,
+     +        150.0E-6,175.0E-6,200.0E-6,225.0E-6,250.0E-6,
+     +        300.0E-6,350.0E-6,400.0E-6,450.0E-6,500.0E-6/) 
+
+        szcls2=(/25.0E-6,30.0E-6,35.0E-6,40.0E-6,45.0E-6,
+     +        50.0E-6,55.0E-6,60.0E-6,70.0E-6,80.0E-6,
+     +        90.0E-6,100.0E-6,115.0E-6,130.0E-6,150.0E-6,
+     +        175.0E-6,200.0E-6,225.0E-6,250.0E-6,300.0E-6,
+     +        350.0E-6,400.0E-6,450.0E-6,500.0E-6,600.0E-6/) 
+
+        dszcls=0.5*(szcls1-szcls2)
+        szcls1=szcls1+dszcls !lower bound
+        szcls2=szcls2+dszcls !upper bound
+        
+        indszcls=maxloc(szcls1,DIM=1,MASK=(rpran1in>=szcls1))
+        rpran1out=0.5*(szcls1(indszcls)+szcls2(indszcls))
+        end subroutine
