@@ -14,7 +14,7 @@ c     ----------------------------------------------------------------------
      +     iocean, method, idebug, iz_space,
      +     ivis0, ifix_dt, new_vis,
      +     ispray,icouple,iTcouple, 
-     +     iHcouple,ievap,iszcls,iSSGF
+     +     iHcouple,ievap,iszcls,iSSGF,ivpran
 c------- !iHcouple also controls TEcouple
          !iszcls spray size
          !iszcls = 0, monodisperse; =1, poly-fixed size, 
@@ -10810,7 +10810,7 @@ c ========================= HISTOGRAM (Histog)  =============================
      +histbins+2,histbins+2,Tp,dTfp)
         !HIST2D 13
         call add_histogram2D(bins_rpinit,bins_rpend,hist2D_rpirpe,
-     +histbins+2,histbins+2,qstr,dqfp)
+     +histbins+2,histbins+2,rpinit,rpend)
 
 
         call destroy_particle  !destroy particle this !Tianze 9/10/15 Ref:Emily
@@ -10822,8 +10822,11 @@ c ========================= HISTOGRAM (Histog)  =============================
         
         !Inject the particles upwards:
         !get the initial vertical velocity:
+        if (ivpran == 1) then
         vinj = ran2(iseed)*Vpmax
-        !vinj = Vpmax
+        else if (ivpran==0) then
+        vinj = Vpmax
+        end if
         zv = radius_init !dummy variable, will be replaced by random rp
         !10/1/2018 Tianze
         call create_particle((/xv,yv,zv/),(/0.0,0.0,vinj/),
@@ -13220,11 +13223,11 @@ c
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91004
-        path2D_tvpz = path_hist(1:iblnk-1)//'/tMvz_2D'//
+        path2D_tvpz = path_hist(1:iblnk-1)//'/tvpz_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91005
-        path2D_tvpx = path_hist(1:iblnk-1)//'/tMvx_2D'//
+        path2D_tvpx = path_hist(1:iblnk-1)//'/tvpx_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
         !File 91006
@@ -13375,9 +13378,9 @@ c    !!! 2-D Histograms
      +  form='formatted',access='sequential')
         do i=0,size(sumbuf2D_dTpdrp,1)
            if (i .eq. 0) then 
-           write(91003,fmt2D) 0,binval_dqfp
+           write(91003,fmt2D) 0,binval_rpdiff
            else 
-           write(91003,fmt2D),binval_tL(i), sumbuf2D_dTpdrp(i,:) !UPDATE BINV
+           write(91003,fmt2D),binval_Tpdiff(i),sumbuf2D_dTpdrp(i,:)!UPDATE BINV
            endif 
         end do
         close(91003)
@@ -13548,8 +13551,8 @@ c    !!! 2-D Histograms
         ! 23 flags +2 9/25/18
         namelist /flags/ noalis,ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
-     +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,
-     +         ispray,icouple,iTcouple,iHcouple,ievap,iszcls,iSSGF
+     +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,ispray,
+     +         icouple,iTcouple,iHcouple,ievap,iszcls,iSSGF,ivpran
  
         ! 10 grid parameters
         namelist /grid_params/ ncpu_s,Uo,TtopC,TbotC,RHT,RHB,wtsfc,
