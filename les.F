@@ -152,7 +152,8 @@ c     ----------------------------------------------------------------------
       !Following three lines are all set in the input file 9/18/18
       real :: radius_init,rhow,nuf,rpmax,rpmin,Vpmax,part_grav  
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os
-      real :: m_s,Sal,Ms,delta_vis 
+      real :: m_s,Sal,Ms,delta_vis,U10 
+      ! U10 only for SSGF
       integer,parameter :: Nrp=25 !total number of size classes 9/25/18 
       !For statistics, bins bounds 11/1/17
       real :: tL1,tL2,dTp1,dTp2,drp1,drp2
@@ -13554,9 +13555,9 @@ c    !!! 2-D Histograms
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,ispray,
      +         icouple,iTcouple,iHcouple,ievap,iszcls,iSSGF,ivpran
  
-        ! 10 grid parameters
+        ! 11 grid parameters
         namelist /grid_params/ ncpu_s,Uo,TtopC,TbotC,RHT,RHB,wtsfc,
-     +         zi, zl, zw1
+     +         zi, zl, zw1,U10
 
         ! 11 params for BCs and ICs
         namelist /BCsICs/ grav,t00,fcor,dtdzf,zo,ugcont,vgcont,massfrac,
@@ -13630,14 +13631,21 @@ c    !!! 2-D Histograms
         SSGF0 = 1.0 !not scaled yet 
 
         end function
-         function SSGF1(rp0)
+       
+        function SSGF1(rp0,U10)
         ! UNSCALED SSGF, NOT REAL BUT SIMILAR DENSITY
-        ! GIVEN MASS FRACTION TO SAMPLE FROM THE DENSITY
-        real,intent(in) :: rp0
+        ! A98 U0=30 m/s Using Troitskaya (2016) forulations
+        real,intent(in) :: rp0,U10
         real :: SSGF1
+        real :: rpdisp,b,d,b0,u0,chi
+        chi=0.023
+        rpdisp=rp0*1.0E6
+        b0=1.9E-4
+        u0=1.0
+        d=0.01*(U10-40)+5.5
+        b=b0*(U10/u0)**d
+        SSGF1=b*exp(-chi*rpdisp)
         
-        SSGF1 = -log(rp0**3) ! for example
-
         end function
          function SSGF2(rp0)
         ! UNSCALED SSGF, NOT REAL BUT SIMILAR DENSITY
@@ -13672,7 +13680,7 @@ c    !!! 2-D Histograms
         if (iSSGF==0) then
         SSGF=SSGF0(rpinit(i))
         else if (iSSGF==1) then
-        SSGF=SSGF1(rpinit(i))
+        SSGF=SSGF1(rpinit(i),U10)
         else if (iSSGF==2) then
         SSGF=SSGF2(rpinit(i))
         end if
