@@ -1,16 +1,16 @@
 
 !Time step information
 &step_params 
-iti=0          !Time step to begin
-itmax=1500   !Max number of time steps
+iti=00000          !Time step to begin, 0 or xx9
+itmax=250000   !Max number of time steps, ending with 0
 imean=100    !Number of time steps between writing mean profiles to output log file
 ihst=10     !Number of time steps between writing profiles to history file
-itape=100  !Number of time steps before opening new history file and writing full 3D volumes
-itstr=1
-it_his=1     !Time step to begin recording history files
-it_viz=1     !Time step to begin recording viz files
-i_viz=5000   !Time steps between writing to viz file
-itn = 0  !Index for "u.le.cou001" files
+itape=5000  !Number of time steps before opening new history file and writing full 3D volumes
+itstr=00001      ! ending with 1
+it_his=00001     !Time step to begin recording history files, xxxx1
+it_viz=00001     !Time step to begin recording viz files ,xxxx1
+i_viz=5000   !Time steps between writing to viz file, xxxx0
+itn = 00  !Index for "u.le.cou001" files
 /
 
 !Flags for various features
@@ -20,8 +20,7 @@ iupwnd=0, ibuoy=0, ifilt=0, itcut=1, isubs=0, ibrcl=0
 iocean=0, method=3, idebug=1, iz_space=1
 ivis0=0, ifix_dt = 0, new_vis=-1
 ispray=1,icouple=0,iTcouple=1
-iHcouple=1,ievap=1,iszcls=1,iSSGF=1
-ivprd=0
+iHcouple=1,ievap=1,iszcls=1,iSSGF=1,ivpran=0,irpsmp=1
 ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface condition (Dirichlet through tsfcc)
 ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
 !iHcouple also controls TE couple
@@ -59,16 +58,16 @@ v_geo=0.0
 
 !Set the paths for code I/O. Must be on the scratch directory, not AFS!
 &path_names
-path_seed="/scratch365/tpeng2/NTLP/polytest2"
-path_part="/scratch365/tpeng2/NTLP/polytest2/part.le.cou000"
-path_res="/scratch365/tpeng2/NTLP/polytest2/u.le.cou000"
-path_sav="/scratch365/tpeng2/NTLP/polytest2"
-path_his="/scratch365/tpeng2/NTLP/polytest2"
-path_viz_xy="/scratch365/tpeng2/NTLP/polytest2"
-path_viz_xz="/scratch365/tpeng2/NTLP/polytest2"
-path_viz_yz="/scratch365/tpeng2/NTLP/polytest2"
-path_stuf="/scratch365/tpeng2/NTLP/polytest2"
-path_hist="/scratch365/tpeng2/NTLP/polytest2"
+path_seed="/scratch365/tpeng2/NTLP/A98smph01"
+path_part="/scratch365/tpeng2/NTLP/A98smph01/part.le.cou000"
+path_res="/scratch365/tpeng2/NTLP/A98smph01/u.le.cou000"
+path_sav="/scratch365/tpeng2/NTLP/A98smph01"
+path_his="/scratch365/tpeng2/NTLP/A98smph01"
+path_viz_xy="/scratch365/tpeng2/NTLP/A98smph01"
+path_viz_xz="/scratch365/tpeng2/NTLP/A98smph01"
+path_viz_yz="/scratch365/tpeng2/NTLP/A98smph01"
+path_stuf="/scratch365/tpeng2/NTLP/A98smph01"
+path_hist="/scratch365/tpeng2/NTLP/A98smph01"
 path_ran="/scratch365/tpeng2/NTLP/initfile/u.le.cou000"
 /
 
@@ -76,8 +75,8 @@ path_ran="/scratch365/tpeng2/NTLP/initfile/u.le.cou000"
 !Material and particle properties and other constants
 &constants
 radius_init=25.00e-6
-rpmax=250.0e-06
 rpmin=20.0e-06
+rpmax=250.0e-06
 rhow=1000.0 !kg/m^3
 nuf=1.537e-05 !m^2/s
 Cpp=4179.0 !J/kg-K
@@ -94,15 +93,16 @@ Os=1.093
 Sal=34.0 !Salinity
 Ms=0.05844
 delta_vis=0.000163 !Bounce at viscous length
+!Nrp=20
 /
 
 & PDF
 tL1=0.0
-tL2=20.0
-dTp1=-1.80
-dTp2=0.75
-drp1=-2.75e-06
-drp2=0.15e-06
+tL2=25.0
+dTp1=-3.00
+dTp2=1.25
+drp1=-3.75e-06
+drp2=0.25e-06
 dup1=-0.5
 dup2=2.0
 dvp1=-0.75
@@ -113,9 +113,9 @@ dTfp1=-0.5
 dTfp2=1.8
 dqfp1=-0.1e-4
 dqfp2=2.0e-3
-Tp1=300.5
-Tp2=301.5
-Tf1=300.5
+Tp1=297.0
+Tp2=302.5
+Tf1=297.5
 Tf2=301.3
 qstr1=0.02
 qstr2=0.025

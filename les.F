@@ -14,7 +14,7 @@ c     ----------------------------------------------------------------------
      +     iocean, method, idebug, iz_space,
      +     ivis0, ifix_dt, new_vis,
      +     ispray,icouple,iTcouple, 
-     +     iHcouple,ievap,iszcls,iSSGF,ivpran
+     +     iHcouple,ievap,iszcls,iSSGF,ivpran,irpsmp
 c------- !iHcouple also controls TEcouple
          !iszcls spray size
          !iszcls = 0, monodisperse; =1, poly-fixed size, 
@@ -4574,6 +4574,8 @@ c     call yd_mpi(wy(1,iys,iz_ss),trigx(1,2),yk(1),
 c    +           nnx,nny,ixs,ixe,ix_s,ix_e,
 c    +           iys,iye,iy_s,iy_e,iz_ss,iz_ee,myid,ncpu_s,numprocs)
 c
+         if (myid==0) write(*,*) 'mpitest',izs,uy(3,4,4),
+     +iys,trigx(1,2),yk(1),nnx,nny,ixs,ixe,myid,ncpu_s,numprocs
       call yd_mpi(uy(1,iys,izs-1),trigx(1,2),yk(1),
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs-1,ize+1,myid,ncpu_s,numprocs)
@@ -5665,7 +5667,7 @@ c
 c ---------- if stretched grid specify location of first point
 c
 c        zw1 = -0.5
-      else
+      else  !iocean==0
 c        t00     = 273 !293.15 !Tianze 8-10-15
          cp      = 1.e3
          gcp     = grav/cp
@@ -10657,12 +10659,18 @@ c  Mono-dispsered or Poly-dispersed radius
       part%radius = radius_init !Brian 7/9/14
 
       else if(iszcls .eq. 1) then
-      call create_random_partsize(rpmin,rpmax,rpran)
-      part%radius=rpran
-      if (myid==0) write (*,*) 'rp_ran:',rpran
+          call create_random_partsize(rpmin,rpmax,rpran)
+          part%radius=rpran
+          if (irpsmp==1) then
+            if (myid==0) write (*,*) 'rp_ran:',rpran
+          end if
       else if(iszcls .eq. 2) then
-      call create_random_partsize(rpmin,rpmax,rpran)
-      call regularize_rpinit(rpran,part%radius) 
+          call create_random_partsize(rpmin,rpmax,rpran)
+          !Pass part%radius to rpran
+          call regularize_rpinit(rpran,part%radius) 
+          if (irpsmp==1) then
+            if (myid==0) write (*,*) 'rp_ran:',rpran
+          end if
       end if
       part%rp_init = part%radius
       part%xp(3)=part%rp_init  !overwrite zp value, Tianze 10/1/2018
@@ -13550,11 +13558,12 @@ c    !!! 2-D Histograms
         ! 10 step parameters
         namelist /step_params/ iti,itmax,imean,ihst,itape,
      +                       itstr,it_his,it_viz,i_viz,itn
-        ! 23 flags +2 9/25/18
+        ! 23 flags +3 10/20/18
         namelist /flags/ noalis,ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,ispray,
-     +         icouple,iTcouple,iHcouple,ievap,iszcls,iSSGF,ivpran
+     +         icouple,iTcouple,iHcouple,ievap,iszcls,iSSGF,ivpran,
+     +         irpsmp
  
         ! 11 grid parameters
         namelist /grid_params/ ncpu_s,Uo,TtopC,TbotC,RHT,RHB,wtsfc,
@@ -13635,7 +13644,7 @@ c    !!! 2-D Histograms
        
         function SSGF1(rp0,U10)
         ! UNSCALED SSGF, NOT REAL BUT SIMILAR DENSITY
-        ! A98 U0=30 m/s Using Troitskaya (2016) forulations
+        ! A98 U10=30 m/s Using Troitskaya (2016) forulations
         real,intent(in) :: rp0,U10
         real :: SSGF1
         real :: rpdisp,b,d,b0,u0,chi
@@ -13643,7 +13652,7 @@ c    !!! 2-D Histograms
         rpdisp=rp0*1.0E6
         b0=1.9E-4
         u0=1.0
-        d=0.01*(U10-40)+5.5
+        d=0.01*(U10-40.0)+5.5
         b=b0*(U10/u0)**d
         SSGF1=b*exp(-chi*rpdisp)
         
@@ -13681,6 +13690,7 @@ c    !!! 2-D Histograms
         if (iSSGF==0) then
         SSGF=SSGF0(rpinit(i))
         else if (iSSGF==1) then
+        if(myid==0) write(*,*) 'U10 read as ',U10 
         SSGF=SSGF1(rpinit(i),U10)
         else if (iSSGF==2) then
         SSGF=SSGF2(rpinit(i))
@@ -13849,7 +13859,7 @@ c ------------ pstat file opened ----------------------
         npfile=ncpu_s*2 !16
         write(npstat,'(i2.2)') dimpstat(2) !dimpstat has ind 0-2 
         fmtpstat='('//npstat//'e15.6)' !print table format
-        if (myid==0) write(*,*) 'format of pstat:', fmtpstat
+c       if (myid==0) write(*,*) 'format of pstat:', fmtpstat
         path_pstat=path_sav
         ipfblnk = index(path_pstat,' ')
         ipfile=71000
