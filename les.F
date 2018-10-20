@@ -4574,8 +4574,9 @@ c     call yd_mpi(wy(1,iys,iz_ss),trigx(1,2),yk(1),
 c    +           nnx,nny,ixs,ixe,ix_s,ix_e,
 c    +           iys,iye,iy_s,iy_e,iz_ss,iz_ee,myid,ncpu_s,numprocs)
 c
-         if (myid==0) write(*,*) 'mpitest',izs,uy(3,4,4),
-     +iys,trigx(1,2),yk(1),nnx,nny,ixs,ixe,myid,ncpu_s,numprocs
+c       test!
+c        if (myid==0) write(*,*) 'mpitest',izs,uy(3,4,4),
+c    +iys,trigx(1,2),yk(1),nnx,nny,ixs,ixe,myid,ncpu_s,numprocs
       call yd_mpi(uy(1,iys,izs-1),trigx(1,2),yk(1),
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs-1,ize+1,myid,ncpu_s,numprocs)
@@ -10652,7 +10653,7 @@ c          end if
      +'time,pxp: ',time,part%xp(1)
       part%vp(1:3) = vp(1:3)
       part%Tp = Tp
-      part%Tf = 0.0 !Tianze 9/28/15
+      part%Tf = Tp !Assume Init fluid value is same as Tp
       
 c  Mono-dispsered or Poly-dispersed radius
       if (iszcls .eq. 0) then
@@ -12893,6 +12894,8 @@ c       end if
 c       end do 
         
 c       Add the current event to the histogram
+        if (myid==0) write(*,*) 'test ibin',ibin,leftmin,rightmax
+        if (myid==0) write(*,*) 'test ibin2',binsdata,histdata,val,sizea
         histdata(ibin) = histdata(ibin) + 1
 c       write(*,*) 'current histogram = ', histdata(ibin)
         end subroutine add_histogram
