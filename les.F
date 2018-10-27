@@ -3,6 +3,8 @@ c     ----------------------------------------------------------------------
 c     ----------------------------------------------------------------------
       ! Time step
       integer :: it
+      ! Manual Debug mode
+      integer :: imndbug
       ! In params.in 
       integer :: 
      +     iti,itmax, imean, ihst,itape,
@@ -10339,6 +10341,16 @@ c         pcount = 0
          !First, interpolate to get the fluid velocity part%uf(1:3):
          call uf_interp     
 
+	 if (isnan(part%Tf) .and. (myid==0)) then
+	 write(*,*) 'PART TF INTERP ERROR',part%Tf
+	 write(*,*) 'check type particles',part%pidx,part%procidx !add real-time szcls, initial known
+         write(*,*) 'particle xp,vp,uf',part%xp,part%vp,part%uf
+	 write(*,*) 'xrhs,vrhs,vp_init',part%xrhs,part%vrhs,part%vp_init
+         write(*,*) 'Tp,Tprhs_s,_l,Tf',part%Tp,part%Tprhs_s,part%Tprhs_L
+	 write(*,*) 'rp,radrhs,qf',part%radius,part%radrhs,part%qinf
+         write(*,*) 'qp,tinit,zpmax,rpinit',part%qstar,part%t_init
+	 write(*,*) 'zpmax,rpinit',part%zp_max,part%rp_init
+	 end if
 
          if (it1 .LE. 1 ) then 
             !part%xrhs(1:3) = part%vp(1:3)
@@ -10347,6 +10359,11 @@ c         pcount = 0
             part%Tp = part%Tf
             part%zp_max=part%xp(3)
          endif
+         !TEST PASSED !Debug Test 10/23/2018
+	if(imndbug==1) then
+         if(isnan(part%radius)) write(*,*)'PARTICLE TEMP LOADING ERROR',
+     +part%Tprhs_s,part%Tprhs_L,part%Tp,dt
+	endif
 
          !Now advance the particle and position via RK3 (same as velocity)
         
@@ -10402,6 +10419,11 @@ c         pcount = 0
      +                                           +Eff_C-Eff_S) !Brian 8/14/14-3
 	 part%qstar = Mw/Ru*estar/part%Tp/rhoa
          
+         !Debug Test 10/23/2018
+	if(imndbug==1) then
+         if(isnan(part%qstar)) write(*,*)'PARTICLE QSTAR CALC ERROR',
+     +part%Tf,TfC,einf,Tpc,Lv,Eff_c,Eff_s,estar,part%qstar,part%radius
+	endif
   
          xtmp(1:3) = part%xp(1:3) + dt*zetas(istage)*part%xrhs(1:3)
          vtmp(1:3) = part%vp(1:3) + dt*zetas(istage)*part%vrhs(1:3) 
@@ -10416,10 +10438,14 @@ c         pcount = 0
             if (ievap .EQ. 1) then      
             part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*
      +                       taup_i*(part%qinf-part%qstar) !Brian 7/18/14: assumes qinf=rhov/rhoa rather than rhov/rhom
+         !Debug Test 10/23/2018
+	if (imndbug==1) then
+         if(isnan(part%radrhs)) write(*,*)'PARTICLE RADRHS CALC ERROR',
+     +part%Tp,part%radius,part%radrhs,dt
             else
             part%radrhs = 0.0
             end if
-
+	endif
 
             part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*
      +                        rhop/rhow*taup_i*(part%Tp-part%Tf)
@@ -10432,8 +10458,15 @@ c         pcount = 0
             part%Tp = part%Tp + dt*gama(istage)*part%Tprhs_L
 	    part%radius = radiustmp + dt*gama(istage)*part%radrhs !Brian 7/22/14
 
-c          end if
-
+	if (imndbug==1) then
+         !Debug Test 10/23/2018
+         if(isnan(part%Tp)) write(*,*) 'PARTICLE TEMP RK3 ERROR',
+     +part%Tprhs_s,part%Tprhs_L,part%Tp,dt
+         if(isnan(part%Tp)) write(*,*) 'PRARTICLE RK3 RAD',part%radius
+         if(isnan(part%Tp)) write(*,*) 'PROC ID=',part%procidx
+         if(isnan(part%Tp)) write(*,*) 'pID=',part%pidx
+         if(isnan(part%Tp)) write(*,*) 'PART Z LOC',part%xp(3)
+	end if
 
 
 
@@ -11837,6 +11870,10 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
          end do
          end do 
          end do
+	if(myid==0) then
+	write(*,*)'Chekcing UF INTERP Error',part%uf
+	write(*,*)'uext,vext,wext',uext(1,1,1),vext(1,1,1),wt(1,1)
+	end if
 
 
       end subroutine uf_interp 
@@ -12895,7 +12932,7 @@ c       end do
         
 c       Add the current event to the histogram
         if (myid==0) write(*,*) 'test ibin',ibin,leftmin,rightmax
-        if (myid==0) write(*,*) 'test ibin2',binsdata,histdata,val,sizea
+        if (myid==0) write(*,*) 'test ibin2',sizea
         histdata(ibin) = histdata(ibin) + 1
 c       write(*,*) 'current histogram = ', histdata(ibin)
         end subroutine add_histogram
@@ -13559,7 +13596,7 @@ c    !!! 2-D Histograms
         character(48) :: label
         character(180) :: params_dir
         ! 10 step parameters
-        namelist /step_params/ iti,itmax,imean,ihst,itape,
+        namelist /step_params/ iti,idebug,itmax,imean,ihst,itape,
      +                       itstr,it_his,it_viz,i_viz,itn
         ! 23 flags +3 10/20/18
         namelist /flags/ noalis,ismlt,ifree,isfc,iradup,
