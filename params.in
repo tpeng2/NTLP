@@ -1,6 +1,7 @@
 
 !Time step information
 &step_params 
+imndbug=0
 iti=00000          !Time step to begin, 0 or xx9
 itmax=250000   !Max number of time steps, ending with 0
 imean=100    !Number of time steps between writing mean profiles to output log file
