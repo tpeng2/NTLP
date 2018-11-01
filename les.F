@@ -19,9 +19,11 @@ c     ----------------------------------------------------------------------
      +     iHcouple,ievap,iszcls,iSSGF,ivpran,irpsmp
 c------- !iHcouple also controls TEcouple
          !iszcls spray size
-         !iszcls = 0, monodisperse; =1, poly-fixed size, 
-         !iszcls = 2, poly-continuos class
-        ! iSSGF=0 (uniform),1(A98),2(MV14)
+         !iszcls = 0, continuous class, mono or poly
+         !iszcls = 1, poly-continuous size, 
+         !iszcls = 2, poly-regularized size,
+         !iszcls = 3, SSGF size normalized by mass (volume) 
+        ! iSSGF=0 (uniform),1(A98),2(MV14),3(binary equal)
 c    ---------------- global constant numbers ---------
       real :: pi ! 
 ! Set the scalar boundary condition based on isfc
@@ -411,6 +413,7 @@ c ----------------------------------------------------------------------
      +           Tpmean(maxnz),Tpmsqr(maxnz),
      +           Tfmean(maxnz),qfmean(maxnz),
      +           wpTpm(maxnz),Tpsrc(maxnz),
+c    + 		 Tpsrc_cls(maxnz,Nrp),!Tianze  10/29/2018 add sizeclass
      +           Tv_tran(maxnz,nscl),Tv_prod(maxnz,nscl),
      +           Tv_diss(maxnz,nscl),
      +           Tv_part1(maxnz,nscl),Tv_part2(maxnz),
@@ -10692,14 +10695,14 @@ c  Mono-dispsered or Poly-dispersed radius
       if (iszcls .eq. 0) then
       part%radius = radius_init !Brian 7/9/14
 
-      else if(iszcls .eq. 1) then
-          call create_random_partsize(rpmin,rpmax,rpran)
+      else if(iszcls .eq. 1 .or. iszcls .eq.3) then
+          call create_random_partsize(rpran)
           part%radius=rpran
           if (irpsmp==1) then
             if (myid==0) write (*,*) 'rp_ran:',rpran
           end if
       else if(iszcls .eq. 2) then
-          call create_random_partsize(rpmin,rpmax,rpran)
+          call create_random_partsize(rpran)
           !Pass part%radius to rpran
           call regularize_rpinit(rpran,part%radius) 
           if (irpsmp==1) then
@@ -11870,10 +11873,12 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
          end do
          end do 
          end do
+	if(imndbug==1) then
 	if(myid==0) then
-	write(*,*)'Chekcing UF INTERP Error',part%uf
+	write(*,*)'Checking UF INTERP Error',part%uf
 	write(*,*)'uext,vext,wext',uext(1,1,1),vext(1,1,1),wt(1,1)
-	end if
+	endif
+	endif
 
 
       end subroutine uf_interp 
@@ -11901,8 +11906,10 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
   
       !For the channel case, set the total number of particles:
       deltaz = zmax-zmin
+      if (iszcls.ne.0) then
       call calc_truc_CDF(rpmin,rpmax)!Defind Sn,Sntruc,CDF
-      call calc_total_tnumpart(massfrac,tnumpart) !assign massfraction
+      call calc_total_tnumpart(massfrac,tnumpart) !assign massfraction  
+      endif
       if (myid==0) write(*,*) 'Snscl(2)',Snscl !correct
       if (myid==0) write(*,*)'tnumpart,',tnumpart
 c     tnumpart = 424643 !Tianze 8/27/15 r25p1new !1036730 
@@ -12931,8 +12938,10 @@ c       end if
 c       end do 
         
 c       Add the current event to the histogram
+	if (imndbug==1) then
         if (myid==0) write(*,*) 'test ibin',ibin,leftmin,rightmax
         if (myid==0) write(*,*) 'test ibin2',sizea
+	endif
         histdata(ibin) = histdata(ibin) + 1
 c       write(*,*) 'current histogram = ', histdata(ibin)
         end subroutine add_histogram
@@ -13596,7 +13605,7 @@ c    !!! 2-D Histograms
         character(48) :: label
         character(180) :: params_dir
         ! 10 step parameters
-        namelist /step_params/ iti,idebug,itmax,imean,ihst,itape,
+        namelist /step_params/ iti,imndbug,itmax,imean,ihst,itape,
      +                       itstr,it_his,it_viz,i_viz,itn
         ! 23 flags +3 10/20/18
         namelist /flags/ noalis,ismlt,ifree,isfc,iradup,
@@ -13611,7 +13620,7 @@ c    !!! 2-D Histograms
 
         ! 11 params for BCs and ICs
         namelist /BCsICs/ grav,t00,fcor,dtdzf,zo,ugcont,vgcont,massfrac,
-     +                  part_grav,Vpmax,u_geo,v_geo
+     +                  tnumpart,part_grav,Vpmax,u_geo,v_geo
 
         ! 11 path names
         namelist /path_names/ path_seed,path_part,path_res,
@@ -13670,7 +13679,15 @@ c    !!! 2-D Histograms
 
 
 
-
+        function SSGFmn(rp0,rpinit0)
+        real,intent(in)::rp0,rpinit0
+	real :: SSGFmn
+	if (rp.eq.rpinit0) then
+        SSGFmn=1.0
+        else 
+        SSGFmn=0.0
+        end if
+        end function
 
         function SSGF0(rp0)
         ! UNSCALED SSGF, NOT REAL BUT SIMILAR DENSITY
@@ -13697,61 +13714,89 @@ c    !!! 2-D Histograms
         SSGF1=b*exp(-chi*rpdisp)
         
         end function
-         function SSGF2(rp0)
+        function SSGF2(rp0)
         ! UNSCALED SSGF, NOT REAL BUT SIMILAR DENSITY
         ! GIVEN MASS FRACTION TO SAMPLE FROM THE DENSITY
         real,intent(in) :: rp0
         real :: SSGF2
         
         SSGF2 = rp0**(-2) 
-
         end function
         
-
+        function SSGFbi(rp0,rpmin0,rpmax0)
+        use pars
+	use particles
+	! BINARY DISTRIBUTION WITH WEIGHTS wg1 and wg2 ON rp1 and rp2
+        real,intent(in)::rp0,rpmin0,rpmax0
+        real :: SSGFbi
+	if (rp0.eq.rpmin0 .or. rp0.eq.rpmax0) then
+        SSGFbi=1.0
+	else
+	SSGFbi=0.0
+	end if
+        end function
 
         subroutine calc_truc_CDF(rpmin1,rpmax1)
         use pars
         use fields
         use con_data
         use particles
+	implicit none
         real,intent(in) :: rpmax1,rpmin1
-        real,allocatable :: rpinit(:)
+        real,allocatable :: rpinit(:),mpinit(:)
         !Sn,Snscl,rpcrop,CDF are global variables
         integer :: irpmax,irpmin
-        integer :: m,n,i,j
-        real :: SSGF,SSGF0,SSGF1,SSGF2ran2
+        integer :: m,n,i,j,imax,imin
+        real :: SSGF,SSGF0,SSGF1,SSGF2
         m=1200 !sample radius size
-        allocate(rpinit(m))
+        allocate(rpinit(m),mpinit(m))
         rpinit(1)=0.0
         rpinit(2:m) = (/((5e-7*i),i=1,m-1)/) !from 0 to m*0.5 um
+        mpinit=4.0/3.0*rhow*rpinit**3*pi
         allocate(Sn(m))
         !non-scaled SSGF
-        do i=1,m
+        ! find index for useful range
+        irpmax=minloc(rpinit,DIM=1,MASK=(rpinit>=rpmax1))-1
+        irpmin=maxloc(rpinit,DIM=1,MASK=(rpinit<=rpmin1))
         if (iSSGF==0) then
-        SSGF=SSGF0(rpinit(i))
+         do i=1,m
+          SSGF=SSGF0(rpinit(i))
+          Sn(i)=SSGF
+         end do
         else if (iSSGF==1) then
+         do i=1,m
         if(myid==0) write(*,*) 'U10 read as ',U10 
-        SSGF=SSGF1(rpinit(i),U10)
+          SSGF=SSGF1(rpinit(i),U10)
+          Sn(i)=SSGF
+         end do
         else if (iSSGF==2) then
-        SSGF=SSGF2(rpinit(i))
+         do i=1,m
+          SSGF=SSGF2(rpinit(i))
+          Sn(i)=SSGF
+         end do
+        else if (iSSGF==3) then
+         do i=1,m
+          SSGF=1e-16
+          Sn(i)=SSGF   
+         end do
+         Sn(irpmin)=1.0
+         Sn(irpmax)=1.0
         end if
-        Sn(i)=SSGF
-        end do
+        if(iszcls==3) Sn=Sn/mpinit !normalize flux by its mass
         if (myid==0) write(*,*)'iSSGF,',iSSGF
         if (myid==0) write(*,*)'rpinit(2),',rpinit(2)
         if (myid==0) write(*,*)'Sn(2),',Sn(2)
         
-        ! find index for useful range
-        irpmax=minloc(rpinit,DIM=1,MASK=(rpinit>=rpmax1))
-        irpmin=maxloc(rpinit,DIM=1,MASK=(rpinit<=rpmin1))
         ! now scale the SSGF
         n=size(Sn(irpmin:irpmax))
         allocate(Snscl(n),rpcrop(n),CDF(n))
         rpcrop=rpinit(irpmin:irpmax)
-        if (myid==0) write(*,*)'rpcrop(2),',rpcrop(2)
         Snscl=Sn(irpmin:irpmax)/sum(Sn(irpmin:irpmax))
         if (myid==0) write(*,*)'sumSncrop,',sum(Sn(irpmin:irpmax))
-        if (myid==0) write(*,*)'Sn,',Sn
+	if(imndbug==1.and.myid==0) write(*,*)'Sn,',Sn
+	if(imndbug==1.and.myid==0) write(*,*)'rpinit,',rpinit
+	if(imndbug==1.and.myid==0) write(*,*)'rpmin,',rpmin1
+	if(imndbug==1.and.myid==0) write(*,*)'rpmax,',rpmax1
         CDF(1) = Snscl(1)
         do j=2,n
         CDF(j)=CDF(j-1)+Snscl(j) 
@@ -13759,45 +13804,32 @@ c    !!! 2-D Histograms
         end
 
 
-        subroutine create_random_partsize(rpmin1,rpmax1,rpran1)
+        subroutine create_random_partsize(rpran1)
         use pars
         use fields
         use con_data
         use con_stats
         use particles
-c
-c       real,intent(in) :: rpmax1,rpmin1
         real,intent(out) :: rpran1
-c       real,allocatable :: rpinit(:)
-c       !Sn,Snscl,rpcrop,CDF are global variables
-c       integer :: irpmax,irpmin
-c       integer :: m,n,i,j
         real :: ran2
-c       real :: SSGF,ran2
-c       m=800 !sample radius size
-c       allocate(rpinit(n))
-c       rpinit(1)=0.0
-c       rpinit(2:800) = (/((5e-7*i),i=1,799)/)
-c       allocate(Sn(size(rpinit)))
-c       !non-scaled SSGF
-c       do i=1,n
-c       Sn(i)=SSGF(rpinit(i))
-c       end do
-c       
-c       ! find index for useful range
-c       irpmax=minloc(rpinit,DIM=1,MASK=(rpinit>=rpmax1))
-c       irpmin=maxloc(rpinit,DIM=1,MASK=(rpinit<=rpmin1))
-c       ! now scale the SSGF
-c       n=size(Sn(irpmin:irpmax))
-c       allocate(Snscl(n),rpcrop(n),CDF(n))
-c       rpcrop=rpinit(irpmin:irpmax)
-c       Snscl=Sn(irpmin:irpmax)/sum(Sn(irpmin:irpmax))
-c       CDF(1) = Snscl(1)
-c       do j=2,n
-c       CDF(j)=CDF(j-1)+Snscl(j) 
-c       end do
         rpran1=rpcrop(minloc(CDF,DIM=1,MASK=(CDF>=ran2(iseed))))
-        end 
+        end subroutine
+        
+c       subroutine create_binary_partsize(rp1,rp2,rpbin)
+c       use pars
+c       use fields
+c       use con_data
+c       use con_stats
+c       use particles
+c       real,intent(in):: rp1,rp2
+c       real,intent(out):: rpbin
+c       real::ran2
+c       if (ran2(issed).le.0.5) then
+c       rpbin=rp1
+c       else 
+c       rpbin=rp2
+c       endif
+c       end subroutine
 
         subroutine calc_total_tnumpart(massfrac1,tnumpart1)
         use pars
@@ -13816,13 +13848,16 @@ c       end do
         ! numerical integration
         n=size(Snscl)
         if (myid==0) write(*,*)'size(Snscl),',n
+        if (myid==0) write(*,*)'rpcrop(1),',rpcrop
         totnumflx=Snscl(1)
-        volflx=4/3*pi*rpcrop(1)*Snscl(1)
-        massflx=(4/3*pi*rpcrop(1)**3*rhow)*Snscl(1)
+        volflx=4.0/3.0*pi*rpcrop(1)**3*Snscl(1)
+        massflx=rhow*volflx
+        if (myid==0) write(*,*)'volflx(1),',volflx
+        if (myid==0) write(*,*)'pi,',pi
         do i = 2,n
         totnumflx = totnumflx + Snscl(i) !# particles unit area unit time
-        volflx=volflx+4/3*pi*rpcrop(i)**3*Snscl(i)
-        massflx=massflx+(4/3*pi*rpcrop(i)**3*rhow)*Snscl(i)
+        massflx=massflx+rhow*4.0/3.0*pi*rpcrop(i)**3*Snscl(i)
+        volflx=volflx+4.0/3.0*pi*rpcrop(i)**3*Snscl(i)
         end do
 c       if (myid==0) write(*,*)'rpcrop(20),',rpcrop(20)!correct
         if (myid==0) write(*,*)'totnumflx,',totnumflx
@@ -13830,7 +13865,7 @@ c       if (myid==0) write(*,*)'rpcrop(20),',rpcrop(20)!correct
         if (myid==0) write(*,*)'massflx,',massflx
         if (myid==0) write(*,*)'dmnvol,',dmnvol
         if (myid==0) write(*,*)'massfrac,',massfrac
-        
+       !tnumpart should be added separately  
         tnumpart1=int(massfrac*(rhoa*dmnvol)/(massflx/totnumflx))
         if (myid==0) write(*,*)'tnumpart1,',tnumpart1
               
@@ -13932,7 +13967,7 @@ c       if (myid==0) write(*,*) 'format of pstat:', fmtpstat
         real,intent(out) :: rpran1out 
         real,dimension(Nrp) :: szcls1,szcls2,dszcls !index starts from 1
         integer :: indszcls
-        
+        if (Nrp==25) then 
         szcls1=(/20.0E-6,25.0E-6,30.0E-6,35.0E-6,40.0E-6,
      +        45.0E-6,50.0E-6,55.0E-6,60.0E-6,70.0E-6,
      +        80.0E-6,90.0E-6,100.0E-6,115.0E-6,130.0E-6,
@@ -13944,6 +13979,7 @@ c       if (myid==0) write(*,*) 'format of pstat:', fmtpstat
      +        90.0E-6,100.0E-6,115.0E-6,130.0E-6,150.0E-6,
      +        175.0E-6,200.0E-6,225.0E-6,250.0E-6,300.0E-6,
      +        350.0E-6,400.0E-6,450.0E-6,500.0E-6,600.0E-6/) 
+       end if
 
         dszcls=0.5*(szcls1-szcls2)
         szcls1=szcls1+dszcls !lower bound
