@@ -13792,11 +13792,14 @@ c    !!! 2-D Histograms
         allocate(Snscl(n),rpcrop(n),CDF(n))
         rpcrop=rpinit(irpmin:irpmax)
         Snscl=Sn(irpmin:irpmax)/sum(Sn(irpmin:irpmax))
+        if (myid==0) write(*,*)'Sn(imin:imax),',Sn(irpmin:irpmax)
         if (myid==0) write(*,*)'sumSncrop,',sum(Sn(irpmin:irpmax))
 	if(imndbug==1.and.myid==0) write(*,*)'Sn,',Sn
 	if(imndbug==1.and.myid==0) write(*,*)'rpinit,',rpinit
 	if(imndbug==1.and.myid==0) write(*,*)'rpmin,',rpmin1
+	if(imndbug==1.and.myid==0) write(*,*)'rpinit(min),',rpinit(irpmin)
 	if(imndbug==1.and.myid==0) write(*,*)'rpmax,',rpmax1
+	if(imndbug==1.and.myid==0) write(*,*)'rpinit(max),',rpinit(irpmax)
         CDF(1) = Snscl(1)
         do j=2,n
         CDF(j)=CDF(j-1)+Snscl(j) 
@@ -13839,7 +13842,10 @@ c       end subroutine
         implicit none
         real,intent(in) :: massfrac1
         integer,intent(out) :: tnumpart1
+        integer,allocatable :: numpartSn(:)
+        real,allocatable::mpweightSn(:),mpcrop(:)
         real :: totnumflx,volfrac,hrzarea,dmnvol,massflx,volflx
+        real :: volp1,massp1,nflxp1
         integer :: i,j,k,m,l,n
         ! area and volume for the domain
         hrzarea=xl*yl
@@ -13847,17 +13853,44 @@ c       end subroutine
         ! get total num flx based unscaled source dencity
         ! numerical integration
         n=size(Snscl)
+        allocate(numpartSn(n),mpweightSn(n),mpcrop(n))
+        ! Now, get mass fraction percentage for each droplets
+	do i=1,n
+        mpcrop(i)=4.0/3.0*pi*rpcrop(i)**3.0
+        if (myid==0) write(*,*)'mpcrop(i)',mpcrop(i)
+	end do
+        if (myid==0) write(*,*)'rpcrop',rpcrop
+        if (myid==0) write(*,*)'pi=',pi
+        if (myid==0) write(*,*)'mass_part',mpcrop
+        ! So it is normalized (numberflx*partmass)
+        mpweightSn=(Snscl*mpcrop)/sum(Snscl*mpcrop)
+        if (myid==0) write(*,*)'sum(Snscl*mpcrop)',sum(Snscl*mpcrop)
+        ! Output results for debug
         if (myid==0) write(*,*)'size(Snscl),',n
         if (myid==0) write(*,*)'rpcrop(1),',rpcrop
+        if (myid==0) write(*,*)'mass weight,',mpweightSn
+        ! computer num/vol/mass for particle
+        nflxp1=Snscl(1)
+        volp1=4.0/3.0*pi*rpcrop(1)**3
+        massp1=volp1*rhow
+        ! computer num/vol/mass flux
         totnumflx=Snscl(1)
         volflx=4.0/3.0*pi*rpcrop(1)**3*Snscl(1)
         massflx=rhow*volflx
+        ! part number for first radius
+        numpartSn(1)=int(massfrac*mpweightSn(1)*(rhoa*dmnvol)/(massp1)) 
         if (myid==0) write(*,*)'volflx(1),',volflx
         if (myid==0) write(*,*)'pi,',pi
         do i = 2,n
         totnumflx = totnumflx + Snscl(i) !# particles unit area unit time
         massflx=massflx+rhow*4.0/3.0*pi*rpcrop(i)**3*Snscl(i)
         volflx=volflx+4.0/3.0*pi*rpcrop(i)**3*Snscl(i)
+        ! computer num/vol/mass for particle
+        nflxp1=Snscl(i)
+        volp1=4.0/3.0*pi*rpcrop(i)**3
+        massp1=volp1*rhow
+        ! part number for first radius
+        numpartSn(i)=int(massfrac*mpweightSn(i)*(rhoa*dmnvol)/(massp1)) 
         end do
 c       if (myid==0) write(*,*)'rpcrop(20),',rpcrop(20)!correct
         if (myid==0) write(*,*)'totnumflx,',totnumflx
@@ -13866,7 +13899,8 @@ c       if (myid==0) write(*,*)'rpcrop(20),',rpcrop(20)!correct
         if (myid==0) write(*,*)'dmnvol,',dmnvol
         if (myid==0) write(*,*)'massfrac,',massfrac
        !tnumpart should be added separately  
-        tnumpart1=int(massfrac*(rhoa*dmnvol)/(massflx/totnumflx))
+       ! tnumpart1=int(massfrac*(rhoa*dmnvol)/(massflx/totnumflx))
+        tnumpart1=sum(numpartSn)
         if (myid==0) write(*,*)'tnumpart1,',tnumpart1
               
         !phi*mair/(massflx per production)
