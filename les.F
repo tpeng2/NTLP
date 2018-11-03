@@ -158,7 +158,7 @@ c     ----------------------------------------------------------------------
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os
       real :: m_s,Sal,Ms,delta_vis,U10 
       ! U10 only for SSGF
-      integer,parameter :: Nrp=25 !total number of size classes 9/25/18 
+      integer,parameter :: Nrp !total number of size classes 9/25/18 
       !For statistics, bins bounds 11/1/17
       real :: tL1,tL2,dTp1,dTp2,drp1,drp2
       real :: dup1,dup2,dvp1,dvp2,dwp1,dwp2
@@ -1266,7 +1266,7 @@ c ----------- a full step, at the new time
 c
       etas(4)  =  0.0
 c
-      cfl = 0.70
+      cfl = 0.60
       !cfl = 0.2  !For phi0.25_rho1000_r100_Mun_Tcpl
 c     cfl = 0.50
 c
@@ -10668,7 +10668,8 @@ c         pcount = 0
 
       real :: xp(3),vp(3),Tp,qinfp,rpran  !Brian 7/29/14
       integer :: idx,ix,proc_idx
-
+      logical :: condsmprp
+      condsmprp=(irpsmp==1 .and. mod(it,100)==0)
       if (.NOT. associated(first_particle)) then
          allocate(first_particle)
          part => first_particle
@@ -10698,14 +10699,14 @@ c  Mono-dispsered or Poly-dispersed radius
       else if(iszcls .eq. 1 .or. iszcls .eq.3) then
           call create_random_partsize(rpran)
           part%radius=rpran
-          if (irpsmp==1) then
+          if (condsmprp) then
             if (myid==0) write (*,*) 'rp_ran:',rpran
           end if
       else if(iszcls .eq. 2) then
           call create_random_partsize(rpran)
           !Pass part%radius to rpran
           call regularize_rpinit(rpran,part%radius) 
-          if (irpsmp==1) then
+          if (condsmprp) then
             if (myid==0) write (*,*) 'rp_ran:',rpran
           end if
       end if
@@ -11882,6 +11883,19 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
 
 
       end subroutine uf_interp 
+
+      subroutine set_sprayclass
+      use pars
+      use particles
+      use con_data
+      if (iSSGF=0 .or. iSSGF==1 .or. iSSGF==2) then
+             Nrp=25
+      else if (iSSGF=3) then
+             Nrp=2
+      end if
+      end subroutine
+
+
       subroutine particle_init
       use particles
       use pars
