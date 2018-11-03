@@ -158,7 +158,7 @@ c     ----------------------------------------------------------------------
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os
       real :: m_s,Sal,Ms,delta_vis,U10 
       ! U10 only for SSGF
-      integer,parameter :: Nrp !total number of size classes 9/25/18 
+      integer:: Nrp !total number of size classes 9/25/18 
       !For statistics, bins bounds 11/1/17
       real :: tL1,tL2,dTp1,dTp2,drp1,drp2
       real :: dup1,dup2,dvp1,dvp2,dwp1,dwp2
@@ -10669,7 +10669,7 @@ c         pcount = 0
       real :: xp(3),vp(3),Tp,qinfp,rpran  !Brian 7/29/14
       integer :: idx,ix,proc_idx
       logical :: condsmprp
-      condsmprp=(irpsmp==1 .and. mod(it,100)==0)
+      condsmprp=(irpsmp==1 .and. mod(it,imean)==0)
       if (.NOT. associated(first_particle)) then
          allocate(first_particle)
          part => first_particle
@@ -11884,13 +11884,13 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
 
       end subroutine uf_interp 
 
-      subroutine set_sprayclass
+      subroutine set_partclass
       use pars
       use particles
       use con_data
-      if (iSSGF=0 .or. iSSGF==1 .or. iSSGF==2) then
+      if (iSSGF==0 .or. iSSGF==1 .or. iSSGF==2) then
              Nrp=25
-      else if (iSSGF=3) then
+      else if (iSSGF==3) then
              Nrp=2
       end if
       end subroutine
@@ -11907,7 +11907,8 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       integer :: Nr_ran !random generated size class 9/25/18
       real :: xv,yv,zv,ran2,deltaz
       real :: maxx,maxy,maxz
-      real :: szcls(Nrp),probsz(Nrp) 
+      real,allocatable :: szcls(:),probsz(:) 
+      allocate(szcls(Nrp),probsz(Nrp))
       !Create the seed for the random number generator:
       call date_and_time(VALUES=values)
       iseed = -(myid+values(8)+values(7)+values(6))
@@ -12015,7 +12016,9 @@ c     real :: EFFc,EFFs,ep,ef,Lv
 
       !Also assign the x,y,z max and mins to track particles leaving
       call set_bounds
-
+     
+      !call setup the size of particle class !11/02/2018
+      call set_partclass
 c     Vpmax = 0.089595 !Tianze 9/11/15
       
 
@@ -13770,7 +13773,7 @@ c    !!! 2-D Histograms
         allocate(Sn(m))
         !non-scaled SSGF
         ! find index for useful range
-        irpmax=minloc(rpinit,DIM=1,MASK=(rpinit>=rpmax1))-1
+        irpmax=minloc(rpinit,DIM=1,MASK=(rpinit>rpmax1))-1
         irpmin=maxloc(rpinit,DIM=1,MASK=(rpinit<=rpmin1))
         if (iSSGF==0) then
          do i=1,m
@@ -13876,8 +13879,12 @@ c       end subroutine
         if (myid==0) write(*,*)'rpcrop',rpcrop
         if (myid==0) write(*,*)'pi=',pi
         if (myid==0) write(*,*)'mass_part',mpcrop
-        ! So it is normalized (numberflx*partmass)
+        ! So if iszcls==3, SSGF is mass-normalized (numberflx*partmass)
+        if (iszcls==3) then
         mpweightSn=(Snscl*mpcrop)/sum(Snscl*mpcrop)
+        else
+        mpweightSn=(Snscl)/sum(Snscl)
+        end if
         if (myid==0) write(*,*)'sum(Snscl*mpcrop)',sum(Snscl*mpcrop)
         ! Output results for debug
         if (myid==0) write(*,*)'size(Snscl),',n
@@ -13903,7 +13910,7 @@ c       end subroutine
         nflxp1=Snscl(i)
         volp1=4.0/3.0*pi*rpcrop(i)**3
         massp1=volp1*rhow
-        ! part number for first radius
+        ! part number for remaining radius
         numpartSn(i)=int(massfrac*mpweightSn(i)*(rhoa*dmnvol)/(massp1)) 
         end do
 c       if (myid==0) write(*,*)'rpcrop(20),',rpcrop(20)!correct
@@ -13912,6 +13919,7 @@ c       if (myid==0) write(*,*)'rpcrop(20),',rpcrop(20)!correct
         if (myid==0) write(*,*)'massflx,',massflx
         if (myid==0) write(*,*)'dmnvol,',dmnvol
         if (myid==0) write(*,*)'massfrac,',massfrac
+        if (myid==0) write(*,*)'numpart(rp),',numpartSn
        !tnumpart should be added separately  
        ! tnumpart1=int(massfrac*(rhoa*dmnvol)/(massflx/totnumflx))
         tnumpart1=sum(numpartSn)
@@ -14013,8 +14021,9 @@ c       if (myid==0) write(*,*) 'format of pstat:', fmtpstat
 
         real,intent(in):: rpran1in
         real,intent(out) :: rpran1out 
-        real,dimension(Nrp) :: szcls1,szcls2,dszcls !index starts from 1
+        real,allocatable :: szcls1(:),szcls2(:),dszcls(:) !index starts from 1
         integer :: indszcls
+        allocate(szcls1(Nrp),szcls2(Nrp),dszcls(Nrp))
         if (Nrp==25) then 
         szcls1=(/20.0E-6,25.0E-6,30.0E-6,35.0E-6,40.0E-6,
      +        45.0E-6,50.0E-6,55.0E-6,60.0E-6,70.0E-6,
