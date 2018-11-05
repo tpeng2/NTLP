@@ -10432,23 +10432,23 @@ c         pcount = 0
          vtmp(1:3) = part%vp(1:3) + dt*zetas(istage)*part%vrhs(1:3) 
          Tptmp = part%Tp + dt*zetas(istage)*part%Tprhs_s
          Tptmp = Tptmp + dt*zetas(istage)*part%Tprhs_L
-	 radiustmp = part%radius + dt*zetas(istage)*part%radrhs !Brian 7/18/14 
+         radiustmp = part%radius + dt*zetas(istage)*part%radrhs !Brian 7/18/14 
 
             part%xrhs(1:3) = part%vp(1:3)
             part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3))
      +                                  - g(1:3)
 
-            if (ievap .EQ. 1) then      
+       if (ievap .EQ. 1) then      
             part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*
      +                       taup_i*(part%qinf-part%qstar) !Brian 7/18/14: assumes qinf=rhov/rhoa rather than rhov/rhom
          !Debug Test 10/23/2018
-	if (imndbug==1) then
-         if(isnan(part%radrhs)) write(*,*)'PARTICLE RADRHS CALC ERROR',
+         if (imndbug==1) then
+          if(isnan(part%radrhs)) write(*,*)'PARTICLE RADRHS CALC ERROR',
      +part%Tp,part%radius,part%radrhs,dt
-            else
+          end if
+       else !(if ievap.eq.0)
             part%radrhs = 0.0
-            end if
-	endif
+       endif !if(ievap .EQ.1)
 
             part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*
      +                        rhop/rhow*taup_i*(part%Tp-part%Tf)
@@ -10771,8 +10771,10 @@ c     if (myid==0) write(*,*) 'time,xp1: ',time,part%xp(1)
       !perfectly elastic collisions on top, bottom walls
       !i.e. location is reflected, w-velocity is negated
 
-      top = zl - radius_init !top = zl - delta_vis!part%radius
-      bot = 0.0 + radius_init !bot = 0.0 + delta_vis!part%radius !Tianze 09/10/15
+      top = zl - part%rp_init !top = zl - delta_vis!part%radius
+      bot = 0.0 + part%rp_init !bot = 0.0 + delta_vis!part%radius !Tianze 09/10/15
+      if (mod(it,500)==0.and.myid==1) write(*,*) 
+     +'top/bottom limit for part locations',top,bot
 
       if (part%xp(3) .GT. top) then  !bouncing
          part%xp(3) = top - (part%xp(3)-top)
