@@ -732,7 +732,7 @@ c
 c --------------- time loop ------------
 c
       !time = 0.37083609E+02
-      allocate(pstat(itape,20))
+      allocate(pstat(itape,22))
       tzero = time
       call get_dt
  9000 continue
@@ -783,8 +783,12 @@ c     write(*,'(a7,4e15.6)') 'zpmax3:',time,part%zp_max
 c     end if
 
 c     ----- record particle stats ----- 
-      if (part%pidx==3 .and. myid.le.ncpu_s*2-1) call record_pstat
-
+      if (part%pidx==3 .and. part%procidx.le.numprocs-1) then
+          call record_pstat
+      end if
+c     ! total number recording particles changed to apply on all procs
+c     ! use part%procidx instead of myid because particles may fly into
+c     ! other processors. 11/06/2018 Tianze
       part => part%next
       if (it == 1) numpart = numpart + 1
       end do
@@ -10773,7 +10777,7 @@ c     if (myid==0) write(*,*) 'time,xp1: ',time,part%xp(1)
 
       top = zl - part%rp_init !top = zl - delta_vis!part%radius
       bot = 0.0 + part%rp_init !bot = 0.0 + delta_vis!part%radius !Tianze 09/10/15
-      if (mod(it,500)==0.and.myid==1) write(*,*) 
+      if (mod(it,itape)==0.and.myid==1) write(*,*) 
      +'top/bottom limit for part locations',top,bot
 
       if (part%xp(3) .GT. top) then  !bouncing
@@ -13959,6 +13963,8 @@ c       write(*,*) 'icpu:',icpu !tested and working
         pstat(itline,14)=part%rp_init
         pstat(itline,15:17)=part%xrhs
         pstat(itline,18:20)=part%vrhs
+        pstat(itline,21)=part%procidx
+        pstat(itline,22)=part%pidx
 c       end if
 c       end do
         end subroutine
@@ -13989,7 +13995,9 @@ c     ---- save particle stat files ----
 c ------------ pstat file opened ---------------------- 
         dimpstat=shape(pstat)
         if (myid==0) write(*,*) dimpstat(1),dimpstat(2)
-        npfile=ncpu_s*2 !16
+c       npfile=ncpu_s*2 !16
+        npfile=numprocs !use numprocs to save all pstat, sort out later
+        !changed on 11/06/2018
         write(npstat,'(i2.2)') dimpstat(2) !dimpstat has ind 0-2 
         fmtpstat='('//npstat//'e15.6)' !print table format
 c       if (myid==0) write(*,*) 'format of pstat:', fmtpstat
