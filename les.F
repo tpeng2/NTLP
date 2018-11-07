@@ -5635,10 +5635,13 @@ c
       use fields
       use con_data
       use con_stats
+      implicit none
 c
       real :: Cpa,rhoa,Mw,Ru
       real :: RHinit
-
+      real :: bfac,t00b,cp,TinitC,topC,botC,izlow,izup,zwstrt
+      real :: ttmean,cs,zodyin,wstar,ufree,utau2
+      integer :: iz
       pi2  = 2.0*pi
 c     grav = 3
       bfac = 1.0
@@ -5688,7 +5691,7 @@ c        fcor    = 0.0
 
 c        Uo from params.in 
 c        TTtopC, TTbotC from params.in
-         Ttop(1) = TtpoC+273.15  !http://www.nasa.gov/centers/goddard/images/content/148071main_Katrina_SSHeights.jpg 
+         Ttop(1) = TtopC+273.15  !http://www.nasa.gov/centers/goddard/images/content/148071main_Katrina_SSHeights.jpg 
          Tbot(1) = TbotC+273.15
          
 c        RHT from params.in
