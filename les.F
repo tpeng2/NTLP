@@ -13975,7 +13975,7 @@ c       character*80 path_pstatfile
          pstat(itline,:)=pstattmp(:)
         else       
         !check proc integrity and MPI_SENDRECV
-        call mpi_sendrecv_replace(
+        call mpi_sendrecv(
      +pstattmp,sizesdrc,mpi_real8,origmyid,!
      +pstat(itline,:),sizesdrc,mpi_real8,tmpmyid,
      +mpi_comm_world,istatus,ierr)
