@@ -13939,8 +13939,12 @@ c       if (myid==0) write(*,*)'rpcrop(20),',rpcrop(20)!correct
         use particles
         use fields
         use con_data
+        include 'mpif.h'
 c     ---- save particle stat files ----
         integer :: icpu,itline,npfile
+        integer :: tmpmyid,origmyid
+        integer :: sizesdrc,istatus,ierr !for MPI
+        real,allocatable::pstatrecv(:),pstatsend(:)
 c       character indpfile1*7,indpid*3,indpfile*7
 c       character*80 path_pstatfile 
         itline=mod(it,itape)
@@ -13965,8 +13969,19 @@ c       write(*,*) 'icpu:',icpu !tested and working
         pstat(itline,18:20)=part%vrhs
         pstat(itline,21)=part%procidx
         pstat(itline,22)=part%pidx
-c       end if
-c       end do
+        
+        !check proc integrity and MPI_SENDRECV
+        tmpmyid=myid
+        origmyid=proc%idx
+        sizesdrc=size(pstat(itline,:))
+        allocate(pstatrecv(sizesdrc),pstatesend(sizesdrc))
+        pstatsend=pstat(itline,:)
+c       if (tmpmyid.ne.origmyid) then
+c       call mpi_sendrecv_replace(
+c    +pstat(itline,:),sizesdrc,mpi_real8,origmyid,!
+c    +pstat(itline,:),sizesdrc,mpi_real8,tmpmyid,
+c    +mpi_comm_world,istatus,ierr)
+c       end if 
         end subroutine
         
         subroutine clear_pstat
