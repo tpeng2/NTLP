@@ -13944,44 +13944,42 @@ c     ---- save particle stat files ----
         integer :: icpu,itline,npfile
         integer :: tmpmyid,origmyid
         integer :: sizesdrc,istatus,ierr !for MPI
-        real,allocatable::pstatrecv(:),pstatsend(:)
+        real,allocatable::pstatrecv(:),pstattmp(:)
 c       character indpfile1*7,indpid*3,indpfile*7
 c       character*80 path_pstatfile 
         itline=mod(it,itape)
         npfile=ncpu_s*2
         if (itline==0) itline=itape
-c       do icpu=1,npfile
-c       if (myid==icpu-1) then
-c       icpu=myid+1
-c       write(*,*) 'icpu:',icpu !tested and working
-        pstat(itline,1)=time
-        pstat(itline,2)=time-part%t_init
-        if (myid==3) write(*,*) 'pstat(it,2,4)',pstat(itline,2)
-        pstat(itline,3:5)=part%xp
-        pstat(itline,6:8)=part%vp
-        pstat(itline,9)=part%Tf
-        pstat(itline,10)=part%Tp
-        pstat(itline,11)=part%qinf
-        pstat(itline,12)=part%qstar
-        pstat(itline,13)=part%radius
-        pstat(itline,14)=part%rp_init
-        pstat(itline,15:17)=part%xrhs
-        pstat(itline,18:20)=part%vrhs
-        pstat(itline,21)=part%procidx
-        pstat(itline,22)=part%pidx
-        
-        !check proc integrity and MPI_SENDRECV
+        !determine if the particle is still in its original cpu
         tmpmyid=myid
-        origmyid=proc%idx
+        origmyid=part%procidx
         sizesdrc=size(pstat(itline,:))
-        allocate(pstatrecv(sizesdrc),pstatesend(sizesdrc))
-        pstatsend=pstat(itline,:)
-c       if (tmpmyid.ne.origmyid) then
-c       call mpi_sendrecv_replace(
-c    +pstat(itline,:),sizesdrc,mpi_real8,origmyid,!
-c    +pstat(itline,:),sizesdrc,mpi_real8,tmpmyid,
-c    +mpi_comm_world,istatus,ierr)
-c       end if 
+        allocate(pstatrecv(sizesdrc),pstattmp(sizesdrc))
+        pstattmp(1)=time
+        pstattmp(2)=time-part%t_init
+        if (myid==3) write(*,*) 'pstat(it,2,4)',pstattmp(2)
+        pstattmp(3:5)=part%xp
+        pstattmp(6:8)=part%vp
+        pstattmp(9)=part%Tf
+        pstattmp(10)=part%Tp
+        pstattmp(11)=part%qinf
+        pstattmp(12)=part%qstar
+        pstattmp(13)=part%radius
+        pstattmp(14)=part%rp_init
+        pstattmp(15:17)=part%xrhs
+        pstattmp(18:20)=part%vrhs
+        pstattmp(21)=part%procidx
+        pstattmp(22)=part%pidx
+
+        if (tmpmyid.eq.origmyid) then
+         pstat(itline,:)=pstattmp(:)
+        else       
+        !check proc integrity and MPI_SENDRECV
+        call mpi_sendrecv_replace(
+     +pstattmp,sizesdrc,mpi_real8,origmyid,!
+     +pstat(itline,:),sizesdrc,mpi_real8,tmpmyid,
+     +mpi_comm_world,istatus,ierr)
+        end if 
         end subroutine
         
         subroutine clear_pstat
