@@ -746,6 +746,7 @@ c
       part => first_particle
       do while (associated(part))
       if (part%pidx == 1 .and. part%procidx == 0) then
+      write(*,'(a7,4e15.6)') 'tL1:  ',time,time-part%tinit   
       write(*,'(a7,4e15.6)') 'xp1:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp1:  ',time,part%vp(1:3)
       write(*,'(a7,4e15.6)') 'uf1:  ',time,part%uf(1:3)
@@ -759,6 +760,7 @@ c
       
       !Add two more sampling point
       if (part%pidx == 2 .and. part%procidx == 0) then
+      write(*,'(a7,4e15.6)') 'tL2:  ',time,time-part%tinit   
       write(*,'(a7,4e15.6)') 'xp2:  ',time,part%xp(1:3)   
       write(*,'(a7,4e15.6)') 'vp2:  ',time,part%vp(1:3)
       write(*,'(a7,4e15.6)') 'uf2:  ',time,part%uf(1:3)
@@ -770,21 +772,22 @@ c
       write(*,'(a7,4e15.6)') 'zpmax2:',time,part%zp_max
       end if
 
-c     if (part%pidx == 3 .and. part%procidx == 0) then
-c     write(*,'(a7,4e15.6)') 'xp3:  ',time,part%xp(1:3)   
-c     write(*,'(a7,4e15.6)') 'vp3:  ',time,part%vp(1:3)
-c     write(*,'(a7,4e15.6)') 'uf3:  ',time,part%uf(1:3)
-c     write(*,'(a7,4e15.6)') 'Tp3:  ',time,part%Tp
-c     write(*,'(a7,4e15.6)') 'Tf3:  ',time,part%Tf
-c     write(*,'(a7,4e15.6)') 'rad3: ',time,part%radius 
-c     write(*,'(a7,4e15.6)') 'qinf3:',time,part%qinf 
-c     write(*,'(a7,4e15.6)') 'qstr3:',time,part%qstar 
-c     write(*,'(a7,4e15.6)') 'zpmax3:',time,part%zp_max
-c     end if
+      if (part%pidx == 3 .and. part%procidx == 0) then
+      write(*,'(a7,4e15.6)') 'tL3:  ',time,time-part%tinit   
+      write(*,'(a7,4e15.6)') 'xp3:  ',time,part%xp(1:3)   
+      write(*,'(a7,4e15.6)') 'vp3:  ',time,part%vp(1:3)
+      write(*,'(a7,4e15.6)') 'uf3:  ',time,part%uf(1:3)
+      write(*,'(a7,4e15.6)') 'Tp3:  ',time,part%Tp
+      write(*,'(a7,4e15.6)') 'Tf3:  ',time,part%Tf
+      write(*,'(a7,4e15.6)') 'rad3: ',time,part%radius 
+      write(*,'(a7,4e15.6)') 'qinf3:',time,part%qinf 
+      write(*,'(a7,4e15.6)') 'qstr3:',time,part%qstar 
+      write(*,'(a7,4e15.6)') 'zpmax3:',time,part%zp_max
+      end if
 
 c     ----- record particle stats ----- 
       if (part%pidx==3 .and. part%procidx.le.numprocs-1) then
-          call record_pstat
+c         call record_pstat
       end if
 c     ! total number recording particles changed to apply on all procs
 c     ! use part%procidx instead of myid because particles may fly into
@@ -881,7 +884,7 @@ c ========================= WRITE HISTOGRAM =======================
         if (myid==2) write(*,*) 'pstat(2,5,3):',pstat(2,5)
         if (myid==4) write(*,*) 'pstat(2,20,5):',pstat(2,20)
         call write_histograms(it-itape+1)
-        call save_pstat
+c       call save_pstat
         call clean_histograms
         call clear_pstat
 c ----------- close pstat file ----------
@@ -5639,7 +5642,7 @@ c
 c
       real :: Cpa,rhoa,Mw,Ru
       real :: RHinit
-      real :: bfac,t00b,cp,TinitC,topC,botC,izlow,izup,zwstrt
+      real :: bfac,t00b,cp,TinitC,izlow,izup,zwstrt
       real :: ttmean,cs,zodyin,wstar,ufree,utau2
       integer :: iz
       pi2  = 2.0*pi
@@ -5700,9 +5703,9 @@ c        RHB from params.in
          Tinit(1) = Tbot(1) 
          TinitC=TbotC
          Ttop(2) =  RHT*Mw/Ru/Ttop(1)*610.94*
-     +               EXP(17.6257*TtopC/(topC+243.04))/rhoa
+     +               EXP(17.6257*TtopC/(TtopC+243.04))/rhoa
          Tbot(2) =  RHB*Mw/Ru/Tbot(1)*610.94*
-     +               EXP(17.6257*TbotC/(botC+243.04))/rhoa
+     +               EXP(17.6257*TbotC/(TbotC+243.04))/rhoa
          Tinit(2) =  RHinit*Mw/Ru/Tinit(1)*610.94*
      +               EXP(17.6257*TinitC/(TinitC+243.04))/rhoa
 c
@@ -10780,7 +10783,7 @@ c     if (myid==0) write(*,*) 'time,xp1: ',time,part%xp(1)
 
       top = zl - part%rp_init !top = zl - delta_vis!part%radius
       bot = 0.0 + part%rp_init !bot = 0.0 + delta_vis!part%radius !Tianze 09/10/15
-      if (mod(it,itape)==0.and.myid==1) write(*,*) 
+      if (imndbug.eq.1.and.mod(it,itape)==0.and.myid==1) write(*,*) 
      +'top/bottom limit for part locations',top,bot
 
       if (part%xp(3) .GT. top) then  !bouncing
