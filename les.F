@@ -804,7 +804,7 @@ c
 
 c     ----- record particle stats ----- 
       if (part%pidx==3 .and. part%procidx.le.numprocs-1) then
-c         call record_pstat
+          call record_pstat
       end if
 c     ! total number recording particles changed to apply on all procs
 c     ! use part%procidx instead of myid because particles may fly into
@@ -901,7 +901,7 @@ c ========================= WRITE HISTOGRAM =======================
         if (myid==2) write(*,*) 'pstat(2,5,3):',pstat(2,5)
         if (myid==4) write(*,*) 'pstat(2,20,5):',pstat(2,20)
         call write_histograms(it-itape+1)
-c       call save_pstat
+        call save_pstat
         call clean_histograms
         call clear_pstat
 c ----------- close pstat file ----------
@@ -10912,7 +10912,7 @@ c ========================= HISTOGRAM (Histog)  =============================
         end if
         zv = radius_init !dummy variable, will be replaced by random rp
         !10/1/2018 Tianze
-        call create_particle((/xv,yv,zv/),(/0.0,0.0,vinj/),
+        call create_particle((/xv,yv,zv/),(/0.3,0.3,vinj/),
      +                     Tbot(1), idx_tmp,procidx_tmp)
               !Tianze 8/13/15 !Brian 7/29/14 Currently ignoring Tp and qinfp
         num_reintro = num_reintro +1 
@@ -13800,8 +13800,8 @@ c    !!! 2-D Histograms
 
         function SSGFmn(rp0,rpinit0)
         real,intent(in)::rp0,rpinit0
-	real :: SSGFmn
-	if (rp.eq.rpinit0) then
+        real :: SSGFmn
+        if (rp.eq.rpinit0) then
         SSGFmn=1.0
         else 
         SSGFmn=0.0
@@ -13844,15 +13844,15 @@ c    !!! 2-D Histograms
         
         function SSGFbi(rp0,rpmin0,rpmax0)
         use pars
-	use particles
-	! BINARY DISTRIBUTION WITH WEIGHTS wg1 and wg2 ON rp1 and rp2
+        use particles
+        ! BINARY DISTRIBUTION WITH WEIGHTS wg1 and wg2 ON rp1 and rp2
         real,intent(in)::rp0,rpmin0,rpmax0
         real :: SSGFbi
-	if (rp0.eq.rpmin0 .or. rp0.eq.rpmax0) then
+        if (rp0.eq.rpmin0 .or. rp0.eq.rpmax0) then
         SSGFbi=1.0
-	else
-	SSGFbi=0.0
-	end if
+        else
+        SSGFbi=0.0
+        end if
         end function
 
         subroutine calc_truc_CDF(rpmin1,rpmax1)
@@ -13860,7 +13860,7 @@ c    !!! 2-D Histograms
         use fields
         use con_data
         use particles
-	implicit none
+        implicit none
         real,intent(in) :: rpmax1,rpmin1
         real,allocatable :: rpinit(:),mpinit(:)
         !Sn,Snscl,rpcrop,CDF are global variables
@@ -13911,15 +13911,15 @@ c    !!! 2-D Histograms
         allocate(Snscl(n),rpcrop(n),CDF(n))
         rpcrop=rpinit(irpmin:irpmax)
         Snscl=Sn(irpmin:irpmax)/sum(Sn(irpmin:irpmax))
-        if (myid==0) write(*,*)'Sn(imin:imax),',Sn(irpmin:irpmax)
-        if (myid==0) write(*,*)'sumSncrop,',sum(Sn(irpmin:irpmax))
-	if(imndbug==1.and.myid==0) write(*,*)'Sn,',Sn
-	if(imndbug==1.and.myid==0) write(*,*)'rpinit,',rpinit
-	if(imndbug==1.and.myid==0) write(*,*)'rpmin,',rpmin1
-	if(imndbug==1.and.myid==0) write(*,*)'rpinit(min),',rpinit(irpmin)
-	if(imndbug==1.and.myid==0) write(*,*)'rpmax,',rpmax1
-	if(imndbug==1.and.myid==0) write(*,*)'rpinit(max),',rpinit(irpmax)
-        CDF(1) = Snscl(1)
+      if (myid==0) write(*,*)'Sn(imin:imax),',Sn(irpmin:irpmax)
+      if (myid==0) write(*,*)'sumSncrop,',sum(Sn(irpmin:irpmax))
+      if(imndbug==1.and.myid==0) write(*,*)'Sn,',Sn
+      if(imndbug==1.and.myid==0) write(*,*)'rpinit,',rpinit
+      if(imndbug==1.and.myid==0) write(*,*)'rpmin,',rpmin1
+      if(imndbug==1.and.myid==0) write(*,*)'rpinit(min),',rpinit(irpmin)
+      if(imndbug==1.and.myid==0) write(*,*)'rpmax,',rpmax1
+      if(imndbug==1.and.myid==0) write(*,*)'rpinit(max),',rpinit(irpmax)
+      CDF(1) = Snscl(1)
         do j=2,n
         CDF(j)=CDF(j-1)+Snscl(j) 
         end do
@@ -13974,10 +13974,10 @@ c       end subroutine
         n=size(Snscl)
         allocate(numpartSn(n),mpweightSn(n),mpcrop(n))
         ! Now, get mass fraction percentage for each droplets
-	do i=1,n
+        do i=1,n
         mpcrop(i)=4.0/3.0*pi*rpcrop(i)**3.0
         if (myid==0) write(*,*)'mpcrop(i)',mpcrop(i)
-	end do
+        end do
         if (myid==0) write(*,*)'rpcrop',rpcrop
         if (myid==0) write(*,*)'pi=',pi
         if (myid==0) write(*,*)'mass_part',mpcrop
@@ -14050,6 +14050,7 @@ c       character*80 path_pstatfile
         tmpmyid=myid
         origmyid=part%procidx
         sizesdrc=size(pstat(itline,:))
+        if (it.eq.1 .and. myid.eq.0) write(*,*) 'sizesdrc',sizesdrc
         allocate(pstatrecv(sizesdrc),pstattmp(sizesdrc))
         pstattmp(1)=time
         pstattmp(2)=time-part%t_init
@@ -14069,12 +14070,17 @@ c       character*80 path_pstatfile
 
         if (tmpmyid.eq.origmyid) then
          pstat(itline,:)=pstattmp(:)
-        else       
-        !check proc integrity and MPI_SENDRECV
-        call mpi_sendrecv(
-     +pstattmp,sizesdrc,mpi_real8,origmyid,!
-     +pstat(itline,:),sizesdrc,mpi_real8,tmpmyid,
-     +mpi_comm_world,istatus,ierr)
+        else     
+        if (myid.eq.tmpmyid) then
+        write(*,*) 'origmyid',origmyid
+        call mpi_send(pstattmp,sizesdrc,mpi_real8,origmyid,1,
+     +mpi_comm_world)
+        end if
+        if (myid.eq.origmyid) then
+        call mpi_recv(pstattmp,sizesdrc,mpi_real8,tmpmyid,1,
+     +mpi_comm_world,istatus)
+        pstat(itline,:)=pstattmp(:)
+        end if
         end if 
         end subroutine
         
