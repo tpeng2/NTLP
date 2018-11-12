@@ -13391,7 +13391,7 @@ c
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
        !File 91014
-        path2D_rpidTp = path_hist(1:iblnk-1)//'/rpidrp_2D'//
+        path2D_rpidrp = path_hist(1:iblnk-1)//'/rpidrp_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
        !File 91014
