@@ -229,6 +229,9 @@ c     =========== SET HISTOGRAM PARAMETERS  (Histog)
       real :: hist2D_TpdTfp(histbins+2,histbins+2)
       !HIST2D 13-
       real :: hist2D_rpirpe(histbins+2,histbins+2)
+      real :: hist2D_rpidTp(histbins+2,histbins+2)
+      real :: hist2D_rpidrp(histbins+2,histbins+2)
+      real :: hist2D_rpitL(histbins+2,histbins+2)
         
 c     update on 10/18/2017
       real,allocatable :: pstat(:,:)!dim: (tstep,varnum) 
@@ -746,7 +749,7 @@ c
       part => first_particle
       do while (associated(part))
       if (part%pidx == 1 .and. part%procidx == 0) then
-      write(*,'(a7,4e15.6)') 'tL1:  ',time,time-part%tinit   
+      write(*,'(a7,4e15.6)') 'tL1:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp1:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp1:  ',time,part%vp(1:3)
       write(*,'(a7,4e15.6)') 'uf1:  ',time,part%uf(1:3)
@@ -760,7 +763,7 @@ c
       
       !Add two more sampling point
       if (part%pidx == 2 .and. part%procidx == 0) then
-      write(*,'(a7,4e15.6)') 'tL2:  ',time,time-part%tinit   
+      write(*,'(a7,4e15.6)') 'tL2:  ',time,time-part%t_init   
       write(*,'(a7,4e15.6)') 'xp2:  ',time,part%xp(1:3)   
       write(*,'(a7,4e15.6)') 'vp2:  ',time,part%vp(1:3)
       write(*,'(a7,4e15.6)') 'uf2:  ',time,part%uf(1:3)
@@ -773,7 +776,7 @@ c
       end if
 
       if (part%pidx == 3 .and. part%procidx == 0) then
-      write(*,'(a7,4e15.6)') 'tL3:  ',time,time-part%tinit   
+      write(*,'(a7,4e15.6)') 'tL3:  ',time,time-part%t_init   
       write(*,'(a7,4e15.6)') 'xp3:  ',time,part%xp(1:3)   
       write(*,'(a7,4e15.6)') 'vp3:  ',time,part%vp(1:3)
       write(*,'(a7,4e15.6)') 'uf3:  ',time,part%uf(1:3)
@@ -784,6 +787,20 @@ c
       write(*,'(a7,4e15.6)') 'qstr3:',time,part%qstar 
       write(*,'(a7,4e15.6)') 'zpmax3:',time,part%zp_max
       end if
+
+      if (part%pidx == 1 .and. part%procidx == 1) then
+      write(*,'(a7,4e15.6)') 'tL4:  ',time,time-part%t_init   
+      write(*,'(a7,4e15.6)') 'xp4:  ',time,part%xp(1:3)   
+      write(*,'(a7,4e15.6)') 'vp4:  ',time,part%vp(1:3)
+      write(*,'(a7,4e15.6)') 'uf4:  ',time,part%uf(1:3)
+      write(*,'(a7,4e15.6)') 'Tp4:  ',time,part%Tp
+      write(*,'(a7,4e15.6)') 'Tf4:  ',time,part%Tf
+      write(*,'(a7,4e15.6)') 'rad4: ',time,part%radius 
+      write(*,'(a7,4e15.6)') 'qinf4:',time,part%qinf 
+      write(*,'(a7,4e15.6)') 'qstr4:',time,part%qstar 
+      write(*,'(a7,4e15.6)') 'zpmax4:',time,part%zp_max
+      end if
+
 
 c     ----- record particle stats ----- 
       if (part%pidx==3 .and. part%procidx.le.numprocs-1) then
@@ -10871,6 +10888,12 @@ c ========================= HISTOGRAM (Histog)  =============================
         !HIST2D 13
         call add_histogram2D(bins_rpinit,bins_rpend,hist2D_rpirpe,
      +histbins+2,histbins+2,rpinit,rpend)
+        call add_histogram2D(bins_rpinit,bins_Tpdiff,hist2D_rpidTp,
+     +histbins+2,histbins+2,rpinit,Tpdiff)
+        call add_histogram2D(bins_rpinit,bins_rpdiff,hist2D_rpidrp,
+     +histbins+2,histbins+2,rpinit,rpdiff)
+        call add_histogram2D(bins_rpinit,bins_tL,hist2D_rpitL,
+     +histbins+2,histbins+2,rpinit,tL)
 
 
         call destroy_particle  !destroy particle this !Tianze 9/10/15 Ref:Emily
@@ -13124,6 +13147,14 @@ c       =========== WRITE HISTOGRAMS ==========
         real :: sumbuf2D_rpirpe(histbins+2,histbins+2)
         real :: binval2D_rpirpe(histbins+2,histbins+2)
 
+        real :: sumbuf2D_rpidTp(histbins+2,histbins+2)
+        real :: binval2D_rpidTp(histbins+2,histbins+2)
+
+        real :: sumbuf2D_rpidrp(histbins+2,histbins+2)
+        real :: binval2D_rpidrp(histbins+2,histbins+2)
+
+        real :: sumbuf2D_rpitL(histbins+2,histbins+2)
+        real :: binval2D_rpitL(histbins+2,histbins+2)
 
         
         !file 90000-90009 
@@ -13138,6 +13169,8 @@ c       =========== WRITE HISTOGRAMS ==========
         character*80 path2D_hdTp,path2D_hdrp 
         character*80 path2D_hvpz,path2D_hvpx 
         character*80 path2D_TpdTfp,path2D_rpirpe 
+        character*80 path2D_rpidTp,path2D_rpidrp,path2D_rpitL 
+
                 
         character cgrid*10, num*3,iblks*16
         character fmt2D*11, fmt2Dnum*4,fmt2Ds*5
@@ -13235,6 +13268,12 @@ c -------------- Collect all histogram from different processors
         call mpi_reduce(hist2D_rpirpe(:,:),sumbuf2D_rpirpe,
      +   (histbins+2)**2, mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
   
+        call mpi_reduce(hist2D_rpidTp(:,:),sumbuf2D_rpidTp,
+     +   (histbins+2)**2, mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+        call mpi_reduce(hist2D_rpidrp(:,:),sumbuf2D_rpidrp,
+     +   (histbins+2)**2, mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+        call mpi_reduce(hist2D_rpitL(:,:),sumbuf2D_rpitL,
+     +   (histbins+2)**2, mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
         if (myid==0) then
 c
@@ -13344,6 +13383,19 @@ c
 
         !File 91012
         path2D_rpirpe = path_hist(1:iblnk-1)//'/rpirpe_2D'//
+     +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
+
+
+       !File 91013
+        path2D_rpidTp = path_hist(1:iblnk-1)//'/rpidTp_2D'//
+     +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
+
+       !File 91014
+        path2D_rpidTp = path_hist(1:iblnk-1)//'/rpidrp_2D'//
+     +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
+
+       !File 91014
+        path2D_rpitL = path_hist(1:iblnk-1)//'/rpitL_2D'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
 
@@ -13573,6 +13625,41 @@ c    !!! 2-D Histograms
         end do
         close(91012)
 
+       open (unit=91013,file=path2D_rpidTp,
+     +  form='formatted',access='sequential')
+        do i=0,size(sumbuf2D_rpidTp,1)
+           if (i .eq. 0) then 
+           write(91013,fmt2D) 0,binval_Tpdiff
+           else 
+           write(91013,fmt2D),binval_rpinit(i), sumbuf2D_rpidTp(i,:) !UPDATE BINV
+           endif 
+        end do
+        close(91013)
+
+       open (unit=91014,file=path2D_rpidrp,
+     +  form='formatted',access='sequential')
+        do i=0,size(sumbuf2D_rpidrp,1)
+           if (i .eq. 0) then 
+           write(91014,fmt2D) 0,binval_rpdiff
+           else 
+           write(91014,fmt2D),binval_rpinit(i), sumbuf2D_rpidrp(i,:) !UPDATE BINV
+           endif 
+        end do
+        close(91014)
+
+
+       open (unit=91015,file=path2D_rpitL,
+     +  form='formatted',access='sequential')
+        do i=0,size(sumbuf2D_rpitL,1)
+           if (i .eq. 0) then 
+           write(91015,fmt2D) 0,binval_tL
+           else 
+           write(91015,fmt2D),binval_rpinit(i), sumbuf2D_rpitL(i,:) !UPDATE BINV
+           endif 
+        end do
+        close(91015)
+
+
 
         end if
 
@@ -13622,6 +13709,9 @@ c    !!! 2-D Histograms
         hist2D_TpdTfp(:,:)=0.0 
         !HIST2D 13
         hist2D_rpirpe(:,:)=0.0 
+        hist2D_rpidTp(:,:)=0.0 
+        hist2D_rpidrp(:,:)=0.0 
+        hist2D_rpitL(:,:)=0.0 
 
         end subroutine clean_histograms
 
