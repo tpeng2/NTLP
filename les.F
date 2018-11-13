@@ -235,7 +235,7 @@ c     =========== SET HISTOGRAM PARAMETERS  (Histog)
         
 c     update on 10/18/2017
       real,allocatable :: pstat(:,:)!dim: (tstep,varnum) 
-     
+      integer :: ipswap !flag for swapping pstat between processors
 c     =========== Particle Type ===========
       !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
       type :: particle
@@ -748,64 +748,98 @@ c
       if (it == 1) numpart = 0
       part => first_particle
       do while (associated(part))
+      !Particle sampling
+      !sample 1
       if (part%pidx == 1 .and. part%procidx == 0) then
       write(*,'(a7,4e15.6)') 'tL1:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp1:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp1:  ',time,part%vp(1:3)
       write(*,'(a7,4e15.6)') 'uf1:  ',time,part%uf(1:3)
-      write(*,'(a7,4e15.6)') 'Tp1:  ',time,part%Tp
-      write(*,'(a7,4e15.6)') 'Tf1:  ',time,part%Tf
-      write(*,'(a7,4e15.6)') 'rad1: ',time,part%radius 
-      write(*,'(a7,4e15.6)') 'qinf1:',time,part%qinf 
-      write(*,'(a7,4e15.6)') 'qstr1:',time,part%qstar 
-      write(*,'(a7,4e15.6)') 'zpmax1:',time,part%zp_max
+      write(*,'(a7,4e15.6)') 'TpTf1:  ',time,part%Tp,part%Tf
+      write(*,'(a7,4e15.6)') 'rprpint1: ',time,part%radius,part%rp_init
+      write(*,'(a7,4e15.6)') 'qpqf1:',time,part%qstar,part%qinf
       end if
       
       !Add two more sampling point
+      !sample 2
       if (part%pidx == 2 .and. part%procidx == 0) then
-      write(*,'(a7,4e15.6)') 'tL2:  ',time,time-part%t_init   
-      write(*,'(a7,4e15.6)') 'xp2:  ',time,part%xp(1:3)   
+      write(*,'(a7,4e15.6)') 'tL2:  ',time,time-part%t_init
+      write(*,'(a7,4e15.6)') 'xp2:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp2:  ',time,part%vp(1:3)
       write(*,'(a7,4e15.6)') 'uf2:  ',time,part%uf(1:3)
-      write(*,'(a7,4e15.6)') 'Tp2:  ',time,part%Tp
-      write(*,'(a7,4e15.6)') 'Tf2:  ',time,part%Tf
-      write(*,'(a7,4e15.6)') 'rad2: ',time,part%radius 
-      write(*,'(a7,4e15.6)') 'qinf2:',time,part%qinf 
-      write(*,'(a7,4e15.6)') 'qstr2:',time,part%qstar 
-      write(*,'(a7,4e15.6)') 'zpmax2:',time,part%zp_max
+      write(*,'(a7,4e15.6)') 'TpTf2:  ',time,part%Tp,part%Tf
+      write(*,'(a7,4e15.6)') 'rprpint2: ',time,part%radius,part%rp_init
+      write(*,'(a7,4e15.6)') 'qpqf2:',time,part%qstar,part%qinf
       end if
 
-      if (part%pidx == 3 .and. part%procidx == 0) then
-      write(*,'(a7,4e15.6)') 'tL3:  ',time,time-part%t_init   
-      write(*,'(a7,4e15.6)') 'xp3:  ',time,part%xp(1:3)   
+      !sample 3
+      if (part%pidx == 1 .and. part%procidx == 1) then
+      write(*,'(a7,4e15.6)') 'tL3:  ',time,time-part%t_init
+      write(*,'(a7,4e15.6)') 'xp3:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp3:  ',time,part%vp(1:3)
       write(*,'(a7,4e15.6)') 'uf3:  ',time,part%uf(1:3)
-      write(*,'(a7,4e15.6)') 'Tp3:  ',time,part%Tp
-      write(*,'(a7,4e15.6)') 'Tf3:  ',time,part%Tf
-      write(*,'(a7,4e15.6)') 'rad3: ',time,part%radius 
-      write(*,'(a7,4e15.6)') 'qinf3:',time,part%qinf 
-      write(*,'(a7,4e15.6)') 'qstr3:',time,part%qstar 
-      write(*,'(a7,4e15.6)') 'zpmax3:',time,part%zp_max
+      write(*,'(a7,4e15.6)') 'TpTf3:  ',time,part%Tp,part%Tf
+      write(*,'(a7,4e15.6)') 'rprpint3: ',time,part%radius,part%rp_init
+      write(*,'(a7,4e15.6)') 'qpqf3:',time,part%qstar,part%qinf 
       end if
-
-      if (part%pidx == 1 .and. part%procidx == 1) then
-      write(*,'(a7,4e15.6)') 'tL4:  ',time,time-part%t_init   
-      write(*,'(a7,4e15.6)') 'xp4:  ',time,part%xp(1:3)   
+      !sample 4
+      if (part%pidx == 2 .and. part%procidx == 1) then
+      write(*,'(a7,4e15.6)') 'tL4:  ',time,time-part%t_init
+      write(*,'(a7,4e15.6)') 'xp4:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp4:  ',time,part%vp(1:3)
       write(*,'(a7,4e15.6)') 'uf4:  ',time,part%uf(1:3)
-      write(*,'(a7,4e15.6)') 'Tp4:  ',time,part%Tp
-      write(*,'(a7,4e15.6)') 'Tf4:  ',time,part%Tf
-      write(*,'(a7,4e15.6)') 'rad4: ',time,part%radius 
-      write(*,'(a7,4e15.6)') 'qinf4:',time,part%qinf 
-      write(*,'(a7,4e15.6)') 'qstr4:',time,part%qstar 
-      write(*,'(a7,4e15.6)') 'zpmax4:',time,part%zp_max
+      write(*,'(a7,4e15.6)') 'TpTf4:  ',time,part%Tp,part%Tf
+      write(*,'(a7,4e15.6)') 'rprpint4: ',time,part%radius,part%rp_init
+      write(*,'(a7,4e15.6)') 'qpqf4:',time,part%qstar,part%qinf
       end if
+      !sample 5
+      if (part%pidx == 1 .and. part%procidx == 2) then
+      write(*,'(a7,4e15.6)') 'tL5:  ',time,time-part%t_init
+      write(*,'(a7,4e15.6)') 'xp5:  ',time,part%xp(1:3)  !Brian 7/16/14 
+      write(*,'(a7,4e15.6)') 'vp5:  ',time,part%vp(1:3)
+      write(*,'(a7,4e15.6)') 'uf5:  ',time,part%uf(1:3)
+      write(*,'(a7,4e15.6)') 'TpTf5:  ',time,part%Tp,part%Tf
+      write(*,'(a7,4e15.6)') 'rprpint5: ',time,part%radius,part%rp_init
+      write(*,'(a7,4e15.6)') 'qpqf5:',time,part%qstar,part%qinf 
+      end if
+      !sample 6
+      if (part%pidx == 2 .and. part%procidx == 2) then
+      write(*,'(a7,4e15.6)') 'tL6:  ',time,time-part%t_init
+      write(*,'(a7,4e15.6)') 'xp6:  ',time,part%xp(1:3)  !Brian 7/16/14 
+      write(*,'(a7,4e15.6)') 'vp6:  ',time,part%vp(1:3)
+      write(*,'(a7,4e15.6)') 'uf6:  ',time,part%uf(1:3)
+      write(*,'(a7,4e15.6)') 'TpTf6:  ',time,part%Tp,part%Tf
+      write(*,'(a7,4e15.6)') 'rprpint6: ',time,part%radius,part%rp_init
+      write(*,'(a7,4e15.6)') 'qpqf6:',time,part%qstar,part%qinf
+      end if
+      !sample 7
+      if (part%pidx == 1 .and. part%procidx == 3) then
+      write(*,'(a7,4e15.6)') 'tp7:  ',time,time-part%t_init
+      write(*,'(a7,4e15.6)') 'xp7:  ',time,part%xp(1:3)  !Brian 7/16/14 
+      write(*,'(a7,4e15.6)') 'vp7:  ',time,part%vp(1:3)
+      write(*,'(a7,4e15.6)') 'uf7:  ',time,part%uf(1:3)
+      write(*,'(a7,4e15.6)') 'TpTf7:  ',time,part%Tp,part%Tf
+      write(*,'(a7,4e15.6)') 'rprpint7: ',time,part%radius,part%rp_init
+      write(*,'(a7,4e15.6)') 'qpqf7:',time,part%qstar,part%qinf
+      end if
+      !sample 8
+      if (part%pidx == 1 .and. part%procidx == 3) then
+      write(*,'(a7,4e15.6)') 'tp8:  ',time,time-part%t_init
+      write(*,'(a7,4e15.6)') 'xp8:  ',time,part%xp(1:3)  !Brian 7/16/14 
+      write(*,'(a7,4e15.6)') 'vp8:  ',time,part%vp(1:3)
+      write(*,'(a7,4e15.6)') 'uf8:  ',time,part%uf(1:3)
+      write(*,'(a7,4e15.6)') 'TpTf8:  ',time,part%Tp,part%Tf
+      write(*,'(a7,4e15.6)') 'rprpint8: ',time,part%radius,part%rp_init
+      write(*,'(a7,4e15.6)') 'qpqf8:',time,part%qstar,part%qinf
+      end if
+
 
 
 c     ----- record particle stats ----- 
-      if (part%pidx==3 .and. part%procidx.le.numprocs-1) then
-          call record_pstat
-      end if
+c     if (part%pidx==3 .and. part%procidx.le.numprocs-1) then
+c         call record_pstat
+c         call recv_pstat
+c     end if
 c     ! total number recording particles changed to apply on all procs
 c     ! use part%procidx instead of myid because particles may fly into
 c     ! other processors. 11/06/2018 Tianze
@@ -897,13 +931,13 @@ c
       endif
 c ========================= WRITE HISTOGRAM =======================
         if (msave .and. istage .eq. 1) then
-        if (myid==1) write(*,*) 'pstat(2,1,2):',pstat(2,1)
-        if (myid==2) write(*,*) 'pstat(2,5,3):',pstat(2,5)
-        if (myid==4) write(*,*) 'pstat(2,20,5):',pstat(2,20)
+c       if (myid==1) write(*,*) 'pstat(2,1,2):',pstat(2,1)
+c       if (myid==2) write(*,*) 'pstat(2,5,3):',pstat(2,5)
+c       if (myid==4) write(*,*) 'pstat(2,20,5):',pstat(2,20)
         call write_histograms(it-itape+1)
-        call save_pstat
+c       call save_pstat
         call clean_histograms
-        call clear_pstat
+c       call clear_pstat
 c ----------- close pstat file ----------
         end if
 
@@ -10912,7 +10946,7 @@ c ========================= HISTOGRAM (Histog)  =============================
         end if
         zv = radius_init !dummy variable, will be replaced by random rp
         !10/1/2018 Tianze
-        call create_particle((/xv,yv,zv/),(/0.3,0.3,vinj/),
+        call create_particle((/xv,yv,zv/),(/0.0,0.0,vinj/),
      +                     Tbot(1), idx_tmp,procidx_tmp)
               !Tianze 8/13/15 !Brian 7/29/14 Currently ignoring Tp and qinfp
         num_reintro = num_reintro +1 
@@ -14035,53 +14069,69 @@ c       if (myid==0) write(*,*)'rpcrop(20),',rpcrop(20)!correct
         use particles
         use fields
         use con_data
+        implicit none
         include 'mpif.h'
 c     ---- save particle stat files ----
-        integer :: icpu,itline,npfile
-        integer :: tmpmyid,origmyid
+        integer :: itline
+        integer :: origmyid
         integer :: sizesdrc,istatus,ierr !for MPI
-        real,allocatable::pstatrecv(:),pstattmp(:)
+c       real,allocatable::pstatrecv(:),pstattmp(:)
 c       character indpfile1*7,indpid*3,indpfile*7
 c       character*80 path_pstatfile 
         itline=mod(it,itape)
-        npfile=ncpu_s*2
         if (itline==0) itline=itape
         !determine if the particle is still in its original cpu
-        tmpmyid=myid
         origmyid=part%procidx
         sizesdrc=size(pstat(itline,:))
-        if (it.eq.1 .and. myid.eq.0) write(*,*) 'sizesdrc',sizesdrc
-        allocate(pstatrecv(sizesdrc),pstattmp(sizesdrc))
-        pstattmp(1)=time
-        pstattmp(2)=time-part%t_init
-        if (myid==3) write(*,*) 'pstat(it,2,4)',pstattmp(2)
-        pstattmp(3:5)=part%xp
-        pstattmp(6:8)=part%vp
-        pstattmp(9)=part%Tf
-        pstattmp(10)=part%Tp
-        pstattmp(11)=part%qinf
-        pstattmp(12)=part%qstar
-        pstattmp(13)=part%radius
-        pstattmp(14)=part%rp_init
-        pstattmp(15:17)=part%xrhs
-        pstattmp(18:20)=part%vrhs
-        pstattmp(21)=part%procidx
-        pstattmp(22)=part%pidx
+        if (it.eq.1) write(*,*) 'sizesdrc',sizesdrc
+c       allocate(pstatrecv(sizesdrc),pstattmp(sizesdrc))
+c       pstattmp(1)=time
+c       pstattmp(2)=time-part%t_init
+c       if (myid==3) write(*,*) 'pstat(it,2,4)',pstattmp(2)
+c       pstattmp(3:5)=part%xp
+c       pstattmp(6:8)=part%vp
+c       pstattmp(9)=part%Tf
+c       pstattmp(10)=part%Tp
+c       pstattmp(11)=part%qinf
+c       pstattmp(12)=part%qstar
+c       pstattmp(13)=part%radius
+c       pstattmp(14)=part%rp_init
+c       pstattmp(15:17)=part%xrhs
+c       pstattmp(18:20)=part%vrhs
+c       pstattmp(21)=part%procidx
+c       pstattmp(22)=part%pidx
 
-        if (tmpmyid.eq.origmyid) then
-         pstat(itline,:)=pstattmp(:)
-        else     
-        if (myid.eq.tmpmyid) then
-        write(*,*) 'origmyid',origmyid
-        call mpi_send(pstattmp,sizesdrc,mpi_real8,origmyid,1,
+        pstat(itline,1)=time
+        pstat(itline,2)=time-part%t_init
+        if (myid==3) write(*,*) 'pstat(it,2,4)',pstat(itline,2)
+        pstat(itline,3:5)=part%xp
+        pstat(itline,6:8)=part%vp
+        pstat(itline,9)=part%Tf
+        pstat(itline,10)=part%Tp
+        pstat(itline,11)=part%qinf
+        pstat(itline,12)=part%qstar
+        pstat(itline,13)=part%radius
+        pstat(itline,14)=part%rp_init
+        pstat(itline,15:17)=part%xrhs
+        pstat(itline,18:20)=part%vrhs
+        pstat(itline,21)=part%procidx
+        pstat(itline,22)=part%pidx
+
+
+        if (myid.ne.origmyid) then     
+          write(*,*) 'pstat(it)',pstat(itline,:)
+          write(*,*) 'myid',myid,'ipswap',ipswap
+          write(*,*) 'procid',origmyid
+          write(*,*) 'sizesdrc',sizesdrc
+          call mpi_send(pstat(itline,:),sizesdrc,mpi_real8,origmyid,1,
      +mpi_comm_world)
         end if
+       
         if (myid.eq.origmyid) then
-        call mpi_recv(pstattmp,sizesdrc,mpi_real8,tmpmyid,1,
+          call mpi_recv(pstat(itline,:),sizesdrc,mpi_real8,myid,1,
      +mpi_comm_world,istatus)
-        pstat(itline,:)=pstattmp(:)
+          write(*,*)'swapped pstat(it)',pstat(itline,:)
         end if
-        end if 
         end subroutine
         
         subroutine clear_pstat
