@@ -15,8 +15,8 @@ c     ----------------------------------------------------------------------
      +     iupwnd, ibuoy, ifilt, itcut, isubs, ibrcl,
      +     iocean, method, idebug, iz_space,
      +     ivis0, ifix_dt, new_vis,
-     +     ispray,icouple,iTcouple, 
-     +     iHcouple,ievap,iszcls,iSSGF,ivpran,irpsmp
+     +     ispray,icouple,iTcouple,iHcouple,ievap,iszcls,
+     +     iSSGF,ivpran,irpsmp,iTeq
 c------- !iHcouple also controls TEcouple
          !iszcls spray size
          !iszcls = 0, continuous class, mono or poly
@@ -153,6 +153,7 @@ c     ----------------------------------------------------------------------
       real :: residual(rbins)
       real :: Rep_avg,massfrac !Tianze 9/11/15 !Brian 8/14/14
       real :: dmb,dmm,dmt !Tianze 7/29/15
+      real :: rpTeqcut !Equilibrium temperature cut
       !Following three lines are all set in the input file 9/18/18
       real :: radius_init,rhow,nuf,rpmax,rpmin,Vpmax,part_grav  
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os
@@ -10355,6 +10356,11 @@ c
       real :: TfC,TpC,Eff_C,Eff_S
       real :: t_s,t_f,t_s1,t_f1!,qq
 
+      ! Equilibrium temperature
+      real :: Dw, Tpis,Tev,ca,cb,DTf,AM1,COEA,COEB,COEC
+      real :: DT1,DT2,y,RHinf
+      integer :: itrcount
+
       g(1:3) = (/0.0, 0.0, part_grav/)
 
       !First fill extended velocity field for interpolation
@@ -10532,8 +10538,33 @@ c         pcount = 0
          if(isnan(part%Tp)) write(*,*) 'PART Z LOC',part%xp(3)
 	end if
 
-
-
+c ============== Equilibrium temperature 11/13/2018 =============
+        if (iTeq.eq.0 .and.part%radius.lt.rpTeqcut) then
+         if (it.eq.1.and.myid.eq.0) write(*,*) 'FORCED Teq'
+         Dw=nuf/Sc
+         ca=Mw*Lv/(Ru*part%Tf)
+         cb=einf/part%Tf*(Lv*Mw*Dw)
+         Tev=part%Tf-1
+         Tpis=part%Tf
+         RHinf=part%qinf/(Mw/Ru*einf/part%Tf/rhoa)
+         do while(abs(Tpis-Tev).gt.1e-8)
+         Tpis=Tev
+         y=2.0*Mw*Gam/(Ru*rhow*part%radius*Tpis)
+     &-Ion*Os*m_s*Mw/Ms/(Volp*rhop-m_s)
+         DTf=Tev-part%Tf;Tev=part%Tf-DT;
+         !Quadratic form
+         AM1=(2*part%Tf+cb-273.15)/(part%Tf+cb-273.15)
+         COEA=cb/part%Tf**2*(ca**2/2-AM1*ca+1)*exp(y)
+         COEB=1+cb/part%Tf*(ca-1)*exp(y)
+         COEC=-cb*(RHinf-exp(y))
+         DT1=(-COEB+sqrt(COEB**2-4*COEA*COEC))/(2*COEA)
+         DT2=(-COEB-sqrt(COEB**2-4*COEA*COEC))/(2*COEA)
+         Tev=DT1+part%Tf
+         itrcount=itrcount+1
+         end do
+         part%Tp=Tev
+        end if
+c===================================================================
         part => part%next
       end do
 
@@ -10871,6 +10902,8 @@ c     write(*,*) 'Tf=',Tf
 c     end if 
         
 c ========================= HISTOGRAM (Histog)  =============================        
+        if(myid==0) write(*,*) 'it,iti',it,iti 
+        if (it.ne.iti+1) then
         !HIST 1-6
         call add_histogram(bins_tL,hist_tL,histbins+2,tL)
         call add_histogram(bins_Tpdiff,hist_Tpdiff,histbins+2,Tpdiff) 
@@ -10928,7 +10961,7 @@ c ========================= HISTOGRAM (Histog)  =============================
      +histbins+2,histbins+2,rpinit,rpdiff)
         call add_histogram2D(bins_rpinit,bins_tL,hist2D_rpitL,
      +histbins+2,histbins+2,rpinit,tL)
-
+        end if
 
         call destroy_particle  !destroy particle this !Tianze 9/10/15 Ref:Emily
  
@@ -12151,8 +12184,8 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       call set_binsdata(bins_qstr,histbins+2,qstr1,qstr2)
       call set_binsdata(bins_qinf,histbins+2,qinf1,qinf2)
       call set_binsdata(bins_hpmax,histbins+2,hmax1,hmax2)
-      call set_binsdata(bins_rpend,histbins+2,0.6*rpmin,1.1*rpmax)
-      call set_binsdata(bins_rpinit,histbins+2,rpmin,rpmax)
+      call set_binsdata(bins_rpend,histbins+2,0.7*rpmin,1.1*rpmax)
+      call set_binsdata(bins_rpinit,histbins+2,0.95*rpmin,0.95*rpmax)
  
 
       if (myid==0) write(*,*) 'Init Particle radius = ',radius_init  !Brian 7/14/14
@@ -12994,7 +13027,7 @@ c       real,intent(inout),dimension(:,:) :: histdata
         leftmin = binsdata(2)
         nbin = histbins !From Module Particle 
         rightmax = binsdata(nbin+1)
-
+        
 c       Calculate size of interval
         dh = (rightmax-leftmin)/(nbin-1)
 c       Find corresponding bin of input data
@@ -13024,10 +13057,10 @@ c       end if
 c       end do 
         
 c       Add the current event to the histogram
-	if (imndbug==1) then
-        if (myid==0) write(*,*) 'test ibin',ibin,leftmin,rightmax
+        if (imndbug==1) then
+        if (myid==0) write(*,*) 'test ibin',ibin,leftmin,rightmax,val
         if (myid==0) write(*,*) 'test ibin2',sizea
-	endif
+        endif
         histdata(ibin) = histdata(ibin) + 1
 c       write(*,*) 'current histogram = ', histdata(ibin)
         end subroutine add_histogram
@@ -13760,12 +13793,12 @@ c    !!! 2-D Histograms
         ! 10 step parameters
         namelist /step_params/ iti,imndbug,itmax,imean,ihst,itape,
      +                       itstr,it_his,it_viz,i_viz,itn
-        ! 23 flags +3 10/20/18
+        ! 23 flags +4 11/13/18
         namelist /flags/ noalis,ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,ispray,
      +         icouple,iTcouple,iHcouple,ievap,iszcls,iSSGF,ivpran,
-     +         irpsmp
+     +         irpsmp,iTeq
  
         ! 11 grid parameters
         namelist /grid_params/ ncpu_s,Uo,TtopC,TbotC,RHT,RHB,wtsfc,
@@ -13784,7 +13817,7 @@ c    !!! 2-D Histograms
         ! CppCpa is calculated in this file later
         namelist /constants/ radius_init,rhow,nuf,
      +         Cpp,Cpa,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os,
-     +         Sal,Ms,delta_vis,rpmax,rpmin
+     +         Sal,Ms,delta_vis,rpmax,rpmin,rpTeqcut
         ! 25 params for partical statistics for PDF
         namelist /PDF/tL1,tL2,dTp1,dTp2,drp1,drp2,dup1,dup2,dvp1,dvp2,
      +         dwp1,dwp2,dTfp1,dTfp2,dqfp1,dqfp2,Tp1,Tp2,
@@ -14220,3 +14253,6 @@ c       if (myid==0) write(*,*) 'format of pstat:', fmtpstat
         indszcls=maxloc(szcls1,DIM=1,MASK=(rpran1in>=szcls1))
         rpran1out=0.5*(szcls1(indszcls)+szcls2(indszcls))
         end subroutine
+
+
+
