@@ -23,7 +23,8 @@ c------- !iHcouple also controls TEcouple
          !iszcls = 1, poly-continuous size, 
          !iszcls = 2, poly-regularized size,
          !iszcls = 3, SSGF size normalized by mass (volume) 
-        ! iSSGF=0 (uniform),1(A98),2(MV14),3(binary equal)
+         !iSSGF=0 (uniform),1(A98),2(MV14),3(binary equal)
+         !iTeq=0
 c    ---------------- global constant numbers ---------
       real :: pi ! 
 ! Set the scalar boundary condition based on isfc
@@ -10539,7 +10540,7 @@ c         pcount = 0
 	end if
 
 c ============== Equilibrium temperature 11/13/2018 =============
-        if (iTeq.eq.0 .and.part%radius.lt.rpTeqcut) then
+        if (iTeq.eq.1 .and.part%radius.lt.rpTeqcut) then
          if (it.eq.1.and.myid.eq.0) write(*,*) 'FORCED Teq'
          Dw=nuf/Sc
          ca=Mw*Lv/(Ru*part%Tf)

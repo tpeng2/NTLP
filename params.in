@@ -21,7 +21,7 @@ iupwnd=0, ibuoy=0, ifilt=0, itcut=1, isubs=0, ibrcl=0
 iocean=0, method=3, idebug=1, iz_space=1
 ivis0=0, ifix_dt = 0, new_vis=-1
 ispray=1,icouple=0,iTcouple=1
-iHcouple=1,ievap=1,iszcls=3,iSSGF=3,ivpran=0,irpsmp=1
+iHcouple=1,ievap=1,iszcls=3,iSSGF=3,ivpran=1,irpsmp=1,iTeq=0
 ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface condition (Dirichlet through tsfcc)
 ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
 !iHcouple also controls TE couple
@@ -29,7 +29,7 @@ iHcouple=1,ievap=1,iszcls=3,iSSGF=3,ivpran=0,irpsmp=1
 
 !Grid and domain parameters
 &grid_params
-ncpu_s=4
+ncpu_s=9 !9 for cheyenne, 8 for CRC, 4 for desktop
 Uo = 0.0  !Sets the magnitude of the top and bottom plate velocities (Couette flow -- assumes equal and opposite)
 TtopC = 25  !Currently this should be (temperature, relative humidity) (used in DNS)
 TbotC = 28  !Currently this should be (temperature, relative humidity) (used in DNS)
