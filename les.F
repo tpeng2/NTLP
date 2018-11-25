@@ -24,7 +24,8 @@ c------- !iHcouple also controls TEcouple
          !iszcls = 2, poly-regularized size,
          !iszcls = 3, SSGF size normalized by mass (volume) 
          !iSSGF=0 (uniform),1(A98),2(MV14),3(binary equal)
-         !iTeq=0
+         !iTeq=0, normal temperature equation
+         !iTeq=1. temperature adjusted to equilibrium temperature if below threshold
 c    ---------------- global constant numbers ---------
       real :: pi ! 
 ! Set the scalar boundary condition based on isfc
