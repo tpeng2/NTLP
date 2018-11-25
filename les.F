@@ -1327,7 +1327,7 @@ c ----------- a full step, at the new time
 c
       etas(4)  =  0.0
 c
-      cfl = 0.60
+c     cfl = 0.60
       !cfl = 0.2  !For phi0.25_rho1000_r100_Mun_Tcpl
 c     cfl = 0.50
 c
@@ -13794,7 +13794,7 @@ c    !!! 2-D Histograms
         character(180) :: params_dir
         ! 10 step parameters
         namelist /step_params/ iti,imndbug,itmax,imean,ihst,itape,
-     +                       itstr,it_his,it_viz,i_viz,itn
+     +                       itstr,it_his,it_viz,i_viz,itn,cfl
         ! 23 flags +4 11/13/18
         namelist /flags/ noalis,ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,

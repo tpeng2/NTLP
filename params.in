@@ -11,7 +11,8 @@ itstr=00001      ! ending with 1
 it_his=00001     !Time step to begin recording history files, xxxx1
 it_viz=00001     !Time step to begin recording viz files ,xxxx1
 i_viz=5000   !Time steps between writing to viz file, xxxx0
-itn = 00  !Index for "u.le.cou001" files
+itn=00  !Index for "u.le.cou001" files
+cfl=0.6
 /
 
 !Flags for various features
