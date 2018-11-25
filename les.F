@@ -10904,7 +10904,7 @@ c     write(*,*) 'Tf=',Tf
 c     end if 
         
 c ========================= HISTOGRAM (Histog)  =============================        
-        if(myid==0) write(*,*) 'it,iti',it,iti 
+c       if(myid==0) write(*,*) 'it,iti',it,iti 
         if (it.ne.iti+1) then
         !HIST 1-6
         call add_histogram(bins_tL,hist_tL,histbins+2,tL)
