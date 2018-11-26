@@ -10541,31 +10541,31 @@ c         pcount = 0
 	end if
 
 c ============== Equilibrium temperature 11/13/2018 =============
-        if (iTeq.eq.1 .and.part%radius.lt.rpTeqcut) then
-         if (it.eq.1.and.myid.eq.0) write(*,*) 'FORCED Teq'
-         Dw=nuf/Sc
-         ca=Mw*Lv/(Ru*part%Tf)
-         cb=einf/part%Tf*(Lv*Mw*Dw)
-         Tev=part%Tf-1
-         Tpis=part%Tf
-         RHinf=part%qinf/(Mw/Ru*einf/part%Tf/rhoa)
-         do while(abs(Tpis-Tev).gt.1e-8)
-         Tpis=Tev
-         y=2.0*Mw*Gam/(Ru*rhow*part%radius*Tpis)
-     &-Ion*Os*m_s*Mw/Ms/(Volp*rhop-m_s)
-         DTf=Tev-part%Tf;Tev=part%Tf-DT;
-         !Quadratic form
-         AM1=(2*part%Tf+cb-273.15)/(part%Tf+cb-273.15)
-         COEA=cb/part%Tf**2*(ca**2/2-AM1*ca+1)*exp(y)
-         COEB=1+cb/part%Tf*(ca-1)*exp(y)
-         COEC=-cb*(RHinf-exp(y))
-         DT1=(-COEB+sqrt(COEB**2-4*COEA*COEC))/(2*COEA)
-         DT2=(-COEB-sqrt(COEB**2-4*COEA*COEC))/(2*COEA)
-         Tev=DT1+part%Tf
-         itrcount=itrcount+1
-         end do
-         part%Tp=Tev
-        end if
+c       if (iTeq.eq.1 .and.part%radius.lt.rpTeqcut) then
+c        if (it.eq.1.and.myid.eq.0) write(*,*) 'FORCED Teq'
+c        Dw=nuf/Sc
+c        ca=Mw*Lv/(Ru*part%Tf)
+c        cb=einf/part%Tf*(Lv*Mw*Dw)
+c        Tev=part%Tf-1
+c        Tpis=part%Tf
+c        RHinf=part%qinf/(Mw/Ru*einf/part%Tf/rhoa)
+c        do while(abs(Tpis-Tev).gt.1e-8)
+c        Tpis=Tev
+c        y=2.0*Mw*Gam/(Ru*rhow*part%radius*Tpis)
+c    &-Ion*Os*m_s*Mw/Ms/(Volp*rhop-m_s)
+c        DTf=Tev-part%Tf;Tev=part%Tf-DT;
+c        !Quadratic form
+c        AM1=(2*part%Tf+cb-273.15)/(part%Tf+cb-273.15)
+c        COEA=cb/part%Tf**2*(ca**2/2-AM1*ca+1)*exp(y)
+c        COEB=1+cb/part%Tf*(ca-1)*exp(y)
+c        COEC=-cb*(RHinf-exp(y))
+c        DT1=(-COEB+sqrt(COEB**2-4*COEA*COEC))/(2*COEA)
+c        DT2=(-COEB-sqrt(COEB**2-4*COEA*COEC))/(2*COEA)
+c        Tev=DT1+part%Tf
+c        itrcount=itrcount+1
+c        end do
+c        part%Tp=Tev
+c       end if
 c===================================================================
         part => part%next
       end do

@@ -54,6 +54,7 @@ vgcont = 0.0   !The initial v-velocity
 tnumpart=424643 !particle count, integer
 massfrac=0.01 !m_water/m_air
 part_grav=0.80278 !effective particle gravity
+Vpmax=0.089595
 u_geo=0.332208140625000
 v_geo=0.0
 /
