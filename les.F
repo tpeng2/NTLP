@@ -15,17 +15,15 @@ c     ----------------------------------------------------------------------
      +     iupwnd, ibuoy, ifilt, itcut, isubs, ibrcl,
      +     iocean, method, idebug, iz_space,
      +     ivis0, ifix_dt, new_vis,
-     +     ispray,icouple,iTcouple,iHcouple,ievap,iszcls,
-     +     iSSGF,ivpran,irpsmp,iTeq
+     +     ispray,icouple,iTcouple, 
+     +     iHcouple,ievap,iszcls,iSSGF,ivpran,irpsmp
 c------- !iHcouple also controls TEcouple
          !iszcls spray size
          !iszcls = 0, continuous class, mono or poly
          !iszcls = 1, poly-continuous size, 
          !iszcls = 2, poly-regularized size,
          !iszcls = 3, SSGF size normalized by mass (volume) 
-         !iSSGF=0 (uniform),1(A98),2(MV14),3(binary equal)
-         !iTeq=0, normal temperature equation
-         !iTeq=1. temperature adjusted to equilibrium temperature if below threshold
+        ! iSSGF=0 (uniform),1(A98),2(MV14),3(binary equal)
 c    ---------------- global constant numbers ---------
       real :: pi ! 
 ! Set the scalar boundary condition based on isfc
@@ -52,7 +50,7 @@ c
      +     maxny2 = maxny + 2
 c     ------------ Boundary Conditions moved from con_d for params.in
       real :: Uo,Ttop(nscl),Tbot(nscl),Tinit(nscl),qstar(nscl)
-      real :: tsfcc(nscl),TtopC,TbotC,RHB,RHT,wtsfc(nscl) !input
+      real :: tsfcc(nscl),TtopC,TbotC,RHB,RHT !input
       real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dtdzf(nscl),zo,vgcont,ugcont
       real :: u_geo,v_geo !Geostrophic wind balance pressure gradient
 c     ----------------------------------------------------------------------
@@ -155,7 +153,6 @@ c     ----------------------------------------------------------------------
       real :: residual(rbins)
       real :: Rep_avg,massfrac !Tianze 9/11/15 !Brian 8/14/14
       real :: dmb,dmm,dmt !Tianze 7/29/15
-      real :: rpTeqcut !Equilibrium temperature cut
       !Following three lines are all set in the input file 9/18/18
       real :: radius_init,rhow,nuf,rpmax,rpmin,Vpmax,part_grav  
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os
@@ -299,7 +296,7 @@ c     ----------------------------------------------------------------------
      +     z1, utausv, dx, dy, dz, dt,
      +     fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax,
      +     time, zody, zody74,
-     +     utau,
+     +     utau,wtsfc(nscl),
      +     uwsfc, vwsfc, amonin,
      +     zol, hol, smal_e, sml_eg
       end type con_d
@@ -312,7 +309,7 @@ c     ----------------------------------------------------------------------
      +     z1, utausv, dx, dy, dz, dt,
      +     fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax,
      +     time, zody, zody74,
-     +     utau,
+     +     utau,wtsfc(:),
      +     uwsfc, vwsfc, amonin,
      +     zol, hol, smal_e, sml_eg
       contains
@@ -367,7 +364,7 @@ c      zl     => c_c%zl
 c     tsfcc  => c_c%tsfcc
       utau   => c_c%utau
 c     qstar  => c_c%qstar
-c     wtsfc  => c_c%wtsfc
+      wtsfc  => c_c%wtsfc
       uwsfc  => c_c%uwsfc
       vwsfc  => c_c%vwsfc
       amonin => c_c%amonin
@@ -754,88 +751,130 @@ c
       !Particle sampling
       !sample 1
       if (part%pidx == 1 .and. part%procidx == 0) then
-      write(*,'(a7,4e15.6)') 'tL1:  ',time,time-part%t_init
+      write(*,'(a7,2e15.6)') 'tL1:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp1:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp1:  ',time,part%vp(1:3)
       write(*,'(a7,4e15.6)') 'uf1:  ',time,part%uf(1:3)
-      write(*,'(a7,4e15.6)') 'TpTf1:  ',time,part%Tp,part%Tf
-      write(*,'(a7,4e15.6)') 'rprpint1: ',time,part%radius,part%rp_init
-      write(*,'(a7,4e15.6)') 'qpqf1:',time,part%qstar,part%qinf
+      write(*,'(a8,3e16.7)') 'TpTf1: ',time,part%Tp,part%Tf
+      write(*,'(a8,3e16.7)') 'rpri1: ',time,part%radius,part%rp_init
+      write(*,'(a8,3e16.7)') 'qpqf1: ',time,part%qstar,part%qinf
       end if
       
       !Add two more sampling point
       !sample 2
       if (part%pidx == 2 .and. part%procidx == 0) then
-      write(*,'(a7,4e15.6)') 'tL2:  ',time,time-part%t_init
+      write(*,'(a7,2e15.6)') 'tL2:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp2:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp2:  ',time,part%vp(1:3)
       write(*,'(a7,4e15.6)') 'uf2:  ',time,part%uf(1:3)
-      write(*,'(a7,4e15.6)') 'TpTf2:  ',time,part%Tp,part%Tf
-      write(*,'(a7,4e15.6)') 'rprpint2: ',time,part%radius,part%rp_init
-      write(*,'(a7,4e15.6)') 'qpqf2:',time,part%qstar,part%qinf
+      write(*,'(a8,3e16.7)') 'TpTf2: ',time,part%Tp,part%Tf
+      write(*,'(a8,3e16.7)') 'rpri2: ',time,part%radius,part%rp_init
+      write(*,'(a8,3e16.7)') 'qpqf2: ',time,part%qstar,part%qinf
       end if
 
       !sample 3
-      if (part%pidx == 1 .and. part%procidx == 1) then
-      write(*,'(a7,4e15.6)') 'tL3:  ',time,time-part%t_init
+      if (part%pidx == 3 .and. part%procidx == 0) then
+      write(*,'(a7,2e15.6)') 'tL3:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp3:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp3:  ',time,part%vp(1:3)
       write(*,'(a7,4e15.6)') 'uf3:  ',time,part%uf(1:3)
-      write(*,'(a7,4e15.6)') 'TpTf3:  ',time,part%Tp,part%Tf
-      write(*,'(a7,4e15.6)') 'rprpint3: ',time,part%radius,part%rp_init
-      write(*,'(a7,4e15.6)') 'qpqf3:',time,part%qstar,part%qinf 
+      write(*,'(a8,3e16.7)') 'TpTf3: ',time,part%Tp,part%Tf
+      write(*,'(a8,3e16.7)') 'rpri3: ',time,part%radius,part%rp_init
+      write(*,'(a8,3e16.7)') 'qpqf3: ',time,part%qstar,part%qinf 
       end if
       !sample 4
-      if (part%pidx == 2 .and. part%procidx == 1) then
-      write(*,'(a7,4e15.6)') 'tL4:  ',time,time-part%t_init
+      if (part%pidx == 1 .and. part%procidx == 1) then
+      write(*,'(a7,2e15.6)') 'tL4:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp4:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp4:  ',time,part%vp(1:3)
       write(*,'(a7,4e15.6)') 'uf4:  ',time,part%uf(1:3)
-      write(*,'(a7,4e15.6)') 'TpTf4:  ',time,part%Tp,part%Tf
-      write(*,'(a7,4e15.6)') 'rprpint4: ',time,part%radius,part%rp_init
-      write(*,'(a7,4e15.6)') 'qpqf4:',time,part%qstar,part%qinf
+      write(*,'(a8,3e16.7)') 'TpTf4: ',time,part%Tp,part%Tf
+      write(*,'(a8,3e16.7)') 'rpri4: ',time,part%radius,part%rp_init
+      write(*,'(a8,3e16.7)') 'qpqf4: ',time,part%qstar,part%qinf
       end if
       !sample 5
-      if (part%pidx == 1 .and. part%procidx == 2) then
-      write(*,'(a7,4e15.6)') 'tL5:  ',time,time-part%t_init
+      if (part%pidx == 2 .and. part%procidx == 1) then
+      write(*,'(a7,2e15.6)') 'tL5:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp5:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp5:  ',time,part%vp(1:3)
       write(*,'(a7,4e15.6)') 'uf5:  ',time,part%uf(1:3)
-      write(*,'(a7,4e15.6)') 'TpTf5:  ',time,part%Tp,part%Tf
-      write(*,'(a7,4e15.6)') 'rprpint5: ',time,part%radius,part%rp_init
-      write(*,'(a7,4e15.6)') 'qpqf5:',time,part%qstar,part%qinf 
+      write(*,'(a8,3e16.7)') 'TpTf5: ',time,part%Tp,part%Tf
+      write(*,'(a8,3e16.7)') 'rpri5: ',time,part%radius,part%rp_init
+      write(*,'(a8,3e16.7)') 'qpqf5: ',time,part%qstar,part%qinf 
       end if
       !sample 6
-      if (part%pidx == 2 .and. part%procidx == 2) then
-      write(*,'(a7,4e15.6)') 'tL6:  ',time,time-part%t_init
+      if (part%pidx == 3 .and. part%procidx == 1) then
+      write(*,'(a7,2e15.6)') 'tL6:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp6:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp6:  ',time,part%vp(1:3)
       write(*,'(a7,4e15.6)') 'uf6:  ',time,part%uf(1:3)
-      write(*,'(a7,4e15.6)') 'TpTf6:  ',time,part%Tp,part%Tf
-      write(*,'(a7,4e15.6)') 'rprpint6: ',time,part%radius,part%rp_init
-      write(*,'(a7,4e15.6)') 'qpqf6:',time,part%qstar,part%qinf
+      write(*,'(a8,3e16.7)') 'TpTf6: ',time,part%Tp,part%Tf
+      write(*,'(a8,3e16.7)') 'rpri6: ',time,part%radius,part%rp_init
+      write(*,'(a8,3e16.7)') 'qpqf6: ',time,part%qstar,part%qinf
       end if
       !sample 7
-      if (part%pidx == 1 .and. part%procidx == 3) then
-      write(*,'(a7,4e15.6)') 'tp7:  ',time,time-part%t_init
+      if (part%pidx == 1 .and. part%procidx == 2) then
+      write(*,'(a7,2e15.6)') 'tL7:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp7:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp7:  ',time,part%vp(1:3)
       write(*,'(a7,4e15.6)') 'uf7:  ',time,part%uf(1:3)
-      write(*,'(a7,4e15.6)') 'TpTf7:  ',time,part%Tp,part%Tf
-      write(*,'(a7,4e15.6)') 'rprpint7: ',time,part%radius,part%rp_init
-      write(*,'(a7,4e15.6)') 'qpqf7:',time,part%qstar,part%qinf
+      write(*,'(a8,3e16.7)') 'TpTf7: ',time,part%Tp,part%Tf
+      write(*,'(a8,3e16.7)') 'rpri7: ',time,part%radius,part%rp_init
+      write(*,'(a8,3e16.7)') 'qpqf7: ',time,part%qstar,part%qinf
       end if
       !sample 8
-      if (part%pidx == 1 .and. part%procidx == 3) then
-      write(*,'(a7,4e15.6)') 'tp8:  ',time,time-part%t_init
+      if (part%pidx == 2 .and. part%procidx == 2) then
+      write(*,'(a7,2e15.6)') 'tL8:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp8:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp8:  ',time,part%vp(1:3)
       write(*,'(a7,4e15.6)') 'uf8:  ',time,part%uf(1:3)
-      write(*,'(a7,4e15.6)') 'TpTf8:  ',time,part%Tp,part%Tf
-      write(*,'(a7,4e15.6)') 'rprpint8: ',time,part%radius,part%rp_init
-      write(*,'(a7,4e15.6)') 'qpqf8:',time,part%qstar,part%qinf
+      write(*,'(a8,3e16.7)') 'TpTf8: ',time,part%Tp,part%Tf
+      write(*,'(a8,3e16.7)') 'rpri8: ',time,part%radius,part%rp_init
+      write(*,'(a8,3e16.7)') 'qpqf8: ',time,part%qstar,part%qinf
+      end if
+      !sample 9
+      if (part%pidx == 3 .and. part%procidx == 2) then
+      write(*,'(a7,2e15.6)') 'tL9:  ',time,time-part%t_init
+      write(*,'(a7,4e15.6)') 'xp9:  ',time,part%xp(1:3)  !Brian 7/16/14 
+      write(*,'(a7,4e15.6)') 'vp9:  ',time,part%vp(1:3)
+      write(*,'(a7,4e15.6)') 'uf9:  ',time,part%uf(1:3)
+      write(*,'(a8,3e16.7)') 'TpTf9: ',time,part%Tp,part%Tf
+      write(*,'(a8,3e16.7)') 'rpri9: ',time,part%radius,part%rp_init
+      write(*,'(a8,3e16.7)') 'qpqf9: ',time,part%qstar,part%qinf
       end if
 
+      !sample 10
+      if (part%pidx == 1 .and. part%procidx == 3) then
+      write(*,'(a7,2e15.6)') 'tL10:  ',time,time-part%t_init
+      write(*,'(a7,4e15.6)') 'xp10:  ',time,part%xp(1:3)  !Brian 7/16/14 
+      write(*,'(a7,4e15.6)') 'vp10:  ',time,part%vp(1:3)
+      write(*,'(a7,4e15.6)') 'uf10:  ',time,part%uf(1:3)
+      write(*,'(a8,3e16.7)') 'TpTf10: ',time,part%Tp,part%Tf
+      write(*,'(a8,3e16.7)') 'rpri10: ',time,part%radius,part%rp_init
+      write(*,'(a8,3e16.7)') 'qpqf10: ',time,part%qstar,part%qinf
+      end if
+
+      !sample 11
+      if (part%pidx == 2 .and. part%procidx == 3) then
+      write(*,'(a7,2e15.6)') 'tL11:  ',time,time-part%t_init
+      write(*,'(a7,4e15.6)') 'xp11:  ',time,part%xp(1:3)  !Brian 7/16/14 
+      write(*,'(a7,4e15.6)') 'vp11:  ',time,part%vp(1:3)
+      write(*,'(a7,4e15.6)') 'uf11:  ',time,part%uf(1:3)
+      write(*,'(a8,3e16.7)') 'TpTf11: ',time,part%Tp,part%Tf
+      write(*,'(a8,3e16.7)') 'rpri11: ',time,part%radius,part%rp_init
+      write(*,'(a8,3e16.7)') 'qpqf11: ',time,part%qstar,part%qinf
+      end if
+
+      !sample 12
+      if (part%pidx == 3 .and. part%procidx == 3) then
+      write(*,'(a7,2e15.6)') 'tL12:  ',time,time-part%t_init
+      write(*,'(a7,4e15.6)') 'xp12:  ',time,part%xp(1:3)  !Brian 7/16/14 
+      write(*,'(a7,4e15.6)') 'vp12:  ',time,part%vp(1:3)
+      write(*,'(a7,4e15.6)') 'uf12:  ',time,part%uf(1:3)
+      write(*,'(a8,3e16.7)') 'TpTf12: ',time,part%Tp,part%Tf
+      write(*,'(a8,3e16.7)') 'rpri12: ',time,part%radius,part%rp_init
+      write(*,'(a8,3e16.7)') 'qpqf12: ',time,part%qstar,part%qinf
+      end if
 
 
 c     ----- record particle stats ----- 
@@ -1327,7 +1366,7 @@ c ----------- a full step, at the new time
 c
       etas(4)  =  0.0
 c
-c     cfl = 0.60
+!     cfl = 0.70
       !cfl = 0.2  !For phi0.25_rho1000_r100_Mun_Tcpl
 c     cfl = 0.50
 c
@@ -5764,8 +5803,8 @@ c        RHB from params.in
      +               EXP(17.6257*TinitC/(TinitC+243.04))/rhoa
 c
 c        wtsfc is defined in upward direction
-c        wtsfc(1) = 0.0 !-32.0/Cpa/rhoa  !Not Advective Flux in DNS
-c        wtsfc(2) = 0.0
+         wtsfc(1) = 0.0 !-32.0/Cpa/rhoa  !Not Advective Flux in DNS
+         wtsfc(2) = 0.0
 c
          qstar(1)=wtsfc(1)
          qstar(2)=wtsfc(2)
@@ -10358,11 +10397,6 @@ c
       real :: TfC,TpC,Eff_C,Eff_S
       real :: t_s,t_f,t_s1,t_f1!,qq
 
-      ! Equilibrium temperature
-      real :: Dw, Tpis,Tev,ca,cb,DTf,AM1,COEA,COEB,COEC
-      real :: DT1,DT2,y,RHinf
-      integer :: itrcount
-
       g(1:3) = (/0.0, 0.0, part_grav/)
 
       !First fill extended velocity field for interpolation
@@ -10540,33 +10574,8 @@ c         pcount = 0
          if(isnan(part%Tp)) write(*,*) 'PART Z LOC',part%xp(3)
 	end if
 
-c ============== Equilibrium temperature 11/13/2018 =============
-c       if (iTeq.eq.1 .and.part%radius.lt.rpTeqcut) then
-c        if (it.eq.1.and.myid.eq.0) write(*,*) 'FORCED Teq'
-c        Dw=nuf/Sc
-c        ca=Mw*Lv/(Ru*part%Tf)
-c        cb=einf/part%Tf*(Lv*Mw*Dw)
-c        Tev=part%Tf-1
-c        Tpis=part%Tf
-c        RHinf=part%qinf/(Mw/Ru*einf/part%Tf/rhoa)
-c        do while(abs(Tpis-Tev).gt.1e-8)
-c        Tpis=Tev
-c        y=2.0*Mw*Gam/(Ru*rhow*part%radius*Tpis)
-c    &-Ion*Os*m_s*Mw/Ms/(Volp*rhop-m_s)
-c        DTf=Tev-part%Tf;Tev=part%Tf-DT;
-c        !Quadratic form
-c        AM1=(2*part%Tf+cb-273.15)/(part%Tf+cb-273.15)
-c        COEA=cb/part%Tf**2*(ca**2/2-AM1*ca+1)*exp(y)
-c        COEB=1+cb/part%Tf*(ca-1)*exp(y)
-c        COEC=-cb*(RHinf-exp(y))
-c        DT1=(-COEB+sqrt(COEB**2-4*COEA*COEC))/(2*COEA)
-c        DT2=(-COEB-sqrt(COEB**2-4*COEA*COEC))/(2*COEA)
-c        Tev=DT1+part%Tf
-c        itrcount=itrcount+1
-c        end do
-c        part%Tp=Tev
-c       end if
-c===================================================================
+
+
         part => part%next
       end do
 
@@ -10904,8 +10913,6 @@ c     write(*,*) 'Tf=',Tf
 c     end if 
         
 c ========================= HISTOGRAM (Histog)  =============================        
-c       if(myid==0) write(*,*) 'it,iti',it,iti 
-        if (it.ne.iti+1) then
         !HIST 1-6
         call add_histogram(bins_tL,hist_tL,histbins+2,tL)
         call add_histogram(bins_Tpdiff,hist_Tpdiff,histbins+2,Tpdiff) 
@@ -10963,7 +10970,7 @@ c       if(myid==0) write(*,*) 'it,iti',it,iti
      +histbins+2,histbins+2,rpinit,rpdiff)
         call add_histogram2D(bins_rpinit,bins_tL,hist2D_rpitL,
      +histbins+2,histbins+2,rpinit,tL)
-        end if
+
 
         call destroy_particle  !destroy particle this !Tianze 9/10/15 Ref:Emily
  
@@ -12186,8 +12193,8 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       call set_binsdata(bins_qstr,histbins+2,qstr1,qstr2)
       call set_binsdata(bins_qinf,histbins+2,qinf1,qinf2)
       call set_binsdata(bins_hpmax,histbins+2,hmax1,hmax2)
-      call set_binsdata(bins_rpend,histbins+2,0.7*rpmin,1.1*rpmax)
-      call set_binsdata(bins_rpinit,histbins+2,0.95*rpmin,0.95*rpmax)
+      call set_binsdata(bins_rpend,histbins+2,0.6*rpmin,1.1*rpmax)
+      call set_binsdata(bins_rpinit,histbins+2,rpmin,rpmax)
  
 
       if (myid==0) write(*,*) 'Init Particle radius = ',radius_init  !Brian 7/14/14
@@ -13029,7 +13036,7 @@ c       real,intent(inout),dimension(:,:) :: histdata
         leftmin = binsdata(2)
         nbin = histbins !From Module Particle 
         rightmax = binsdata(nbin+1)
-        
+
 c       Calculate size of interval
         dh = (rightmax-leftmin)/(nbin-1)
 c       Find corresponding bin of input data
@@ -13059,10 +13066,10 @@ c       end if
 c       end do 
         
 c       Add the current event to the histogram
-        if (imndbug==1) then
-        if (myid==0) write(*,*) 'test ibin',ibin,leftmin,rightmax,val
+	if (imndbug==1) then
+        if (myid==0) write(*,*) 'test ibin',ibin,leftmin,rightmax
         if (myid==0) write(*,*) 'test ibin2',sizea
-        endif
+	endif
         histdata(ibin) = histdata(ibin) + 1
 c       write(*,*) 'current histogram = ', histdata(ibin)
         end subroutine add_histogram
@@ -13795,15 +13802,15 @@ c    !!! 2-D Histograms
         ! 10 step parameters
         namelist /step_params/ iti,imndbug,itmax,imean,ihst,itape,
      +                       itstr,it_his,it_viz,i_viz,itn,cfl
-        ! 23 flags +4 11/13/18
+        ! 23 flags +3 10/20/18
         namelist /flags/ noalis,ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,ispray,
      +         icouple,iTcouple,iHcouple,ievap,iszcls,iSSGF,ivpran,
-     +         irpsmp,iTeq
+     +         irpsmp
  
         ! 11 grid parameters
-        namelist /grid_params/ ncpu_s,Uo,TtopC,TbotC,RHT,RHB,wtsfc,
+        namelist /grid_params/ ncpu_s,Uo,TtopC,TbotC,RHT,RHB,
      +         zi, zl, zw1,U10
 
         ! 11 params for BCs and ICs
@@ -13819,7 +13826,7 @@ c    !!! 2-D Histograms
         ! CppCpa is calculated in this file later
         namelist /constants/ radius_init,rhow,nuf,
      +         Cpp,Cpa,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os,
-     +         Sal,Ms,delta_vis,rpmax,rpmin,rpTeqcut
+     +         Sal,Ms,delta_vis,rpmax,rpmin
         ! 25 params for partical statistics for PDF
         namelist /PDF/tL1,tL2,dTp1,dTp2,drp1,drp2,dup1,dup2,dvp1,dvp2,
      +         dwp1,dwp2,dTfp1,dTfp2,dqfp1,dqfp2,Tp1,Tp2,
@@ -14255,6 +14262,3 @@ c       if (myid==0) write(*,*) 'format of pstat:', fmtpstat
         indszcls=maxloc(szcls1,DIM=1,MASK=(rpran1in>=szcls1))
         rpran1out=0.5*(szcls1(indszcls)+szcls2(indszcls))
         end subroutine
-
-
-
