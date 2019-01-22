@@ -10763,13 +10763,13 @@ c         pcount = 0
 
       end subroutine particle_update_rk3
 
-      subroutine create_particle(xp,vp,Tp,idx,proc_idx) !Currently ignoring Tp and qinfp
+      subroutine create_particle(xp,vp,Tp,idx,proc_idx,rpi1) !Currently ignoring Tp and qinfp
       use particles
       use pars
       use con_data
       implicit none
-
       real :: xp(3),vp(3),Tp,qinfp,rpran  !Brian 7/29/14
+      real,intent(in) :: rpi1
       integer :: idx,ix,proc_idx
       logical :: condsmprp
       condsmprp=(irpsmp==1 .and. mod(it,imean)==0)
@@ -10794,24 +10794,28 @@ c         pcount = 0
       part%vp(1:3) = vp(1:3)
       part%Tp = Tp
       part%Tf = Tp !Assume Init fluid value is same as Tp
-      
+c  if time is zero
+      if (time .eq. 0.0) then
 c  Mono-dispsered or Poly-dispersed radius
-      if (iszcls .eq. 0) then
-      part%radius = radius_init !Brian 7/9/14
-
-      else if(iszcls .eq. 1 .or. iszcls .eq.3) then
-          call create_random_partsize(rpran)
-          part%radius=rpran
-          if (condsmprp) then
-            if (myid==0) write (*,*) 'rp_ran:',rpran
-          end if
-      else if(iszcls .eq. 2) then
-          call create_random_partsize(rpran)
-          !Pass part%radius to rpran
-          call regularize_rpinit(rpran,part%radius) 
-          if (condsmprp) then
-            if (myid==0) write (*,*) 'rp_ran:',rpran
-          end if
+       if (iszcls .eq. 0) then
+       part%radius = radius_init !Brian 7/9/14
+ 
+       else if(iszcls .eq. 1 .or. iszcls .eq.3) then
+           call create_random_partsize(rpran)
+           part%radius=rpran
+           if (condsmprp) then
+             if (mod(myid,2)==0) write (*,*) 'rp_ran:',rpran
+           end if
+       else if(iszcls .eq. 2) then
+           call create_random_partsize(rpran)
+           !Pass part%radius to rpran
+           call regularize_rpinit(rpran,part%radius) 
+           if (condsmprp) then
+             if (mod(myid,2)==0) write (*,*) 'rp_ran:',rpran
+           end if
+       end if 
+      elseif (time .ne. 0.0) then
+      part%radius=rpi1
       end if
       part%rp_init = part%radius
       part%xp(3)=part%rp_init  !overwrite zp value, Tianze 10/1/2018
@@ -10989,7 +10993,9 @@ c ========================= HISTOGRAM (Histog)  =============================
         zv = radius_init !dummy variable, will be replaced by random rp
         !10/1/2018 Tianze
         call create_particle((/xv,yv,zv/),(/0.0,0.0,vinj/),
-     +                     Tbot(1), idx_tmp,procidx_tmp)
+     +                     Tbot(1), idx_tmp,procidx_tmp,rpinit)
+c       part%rp_init=rpinit
+c       part%radius=part%rp_init
               !Tianze 8/13/15 !Brian 7/29/14 Currently ignoring Tp and qinfp
         num_reintro = num_reintro +1 
         !after creating new particle to the beginning, the pointer 'part'
@@ -12059,7 +12065,7 @@ c     tnumpart = 424643 !Tianze 8/27/15 r25p1new !1036730
       yv = ran2(iseed)*(ymax-ymin) + ymin
       zv = ran2(iseed)*(zl-2.0*delta_vis) + delta_vis     !Brian 2/20/15 No droplets in viscous region
       call create_particle((/xv,yv,zv/),(/0.01,0.0,0.0/),
-     +                   Tbot(1),idx,myid)  !Tianze 8/13/15 !Brian 7/29/14 Currently ignoring Tp and qinfp
+     +                   Tbot(1),idx,myid,radius_init)  !Tianze 8/13/15 !Brian 7/29/14 Currently ignoring Tp and qinfp
       end do
 
       partTsrc = 0.0
