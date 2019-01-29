@@ -11034,7 +11034,10 @@ c ========================= HISTOGRAM (Histog)  =============================
         if ((locpid.ge.1).and.(locpid.le.12)) then
         if (locpid.eq.locproc) then
              !change pidspl to numbers divisible to its own value
-             pid_tmp(locpid)=nint(1.5*ran2(iseed)*pidspl(locpid))
+           pid_tmp(locpid)=nint(1+1.5*ran2(iseed)*pid_tmp(locpid)) 
+             if (pid_tmp(locpid).ge.nint(0.8*tnumpart/numprocs)) then
+                pid_tmp(locpid)=nint(0.75+2*ran2(iseed))
+             end if
 c            proc_tmp(locproc)=nint(0.1+4*ran2(iseed)*procspl(locproc))
 c               write(*,*)'myid',myid,'changed pid',pid_tmp(locpid)
 c               write(*,*)'myid',myid,'changed procid',proc_tmp(locproc)
