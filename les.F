@@ -777,7 +777,7 @@ c       if (myid==1) write(*,*) 'pidspl changed:',pidspl(ipidspl)
       if (myid==1) then
               write(*,01506) 'procspl',time,procspl
               write(*,01506) 'pidspl',time,pidspl
-01506 format(a7,e15.6,12i3.2)
+01506 format(a7,e15.6,12i4.3)
       end if
       if (ispray==1) then
       if (it == 1) numpart = 0
@@ -11034,7 +11034,7 @@ c ========================= HISTOGRAM (Histog)  =============================
         if ((locpid.ge.1).and.(locpid.le.12)) then
         if (locpid.eq.locproc) then
              !change pidspl to numbers divisible to its own value
-             pid_tmp(locpid)=nint(3*ran2(iseed)*pidspl(locpid))
+             pid_tmp(locpid)=nint(1.5*ran2(iseed)*pidspl(locpid))
 c            proc_tmp(locproc)=nint(0.1+4*ran2(iseed)*procspl(locproc))
 c               write(*,*)'myid',myid,'changed pid',pid_tmp(locpid)
 c               write(*,*)'myid',myid,'changed procid',proc_tmp(locproc)
