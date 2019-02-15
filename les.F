@@ -26,10 +26,6 @@ c------- !iHcouple also controls TEcouple
         ! iSSGF=0 (uniform),1(A98),2(MV14),3(binary equal)
 c    ---------------- global constant numbers ---------
       real :: pi ! 
-c    -------------- particle sampling -------
-      integer :: ipidspl,iprocspl,locpid,locproc
-      integer,allocatable :: pidspl(:),procspl(:)
-      integer,allocatable :: pidnewspl(:),procnewspl(:)
 ! Set the scalar boundary condition based on isfc
 c            isfc = 0, specified surface heat flux (through wtsfc)
 c                 = 1, specified surface temperature (tsfcc) 
@@ -653,13 +649,6 @@ c    ---------- Define PI()--------------
 
       pi = 4.0*atan(1.0)
       if (myid==5) write(*,*) 'PI() is defined.'
-c ------------- Initialize sample pid,procid ----------------i
-      allocate(procspl(12),pidspl(12))
-      allocate(procnewspl(12),pidnewspl(12))
-      procspl=(/0,1,2,3,4,5,6,7,8,9,10,11/)
-      pidspl=(/1,2,3,1,2,3,1,2,3,1,2,3/)
-      pidnewspl=0
-      procnewspl=0
 c ---------- initialize MPI, get myid, numprocs, 
 c            test if on root process
 c
@@ -754,38 +743,22 @@ c
       if (myid==0) then
       write(*,*) 'it,time = ',it,time
       end if
-       
-c     if (myid==0) write(*,*) 'pidspl=',pidspl
-c     if (myid==0) write(*,*) 'procspl=',procspl
 
-      !after Allreduce, replace non-zero pidnew and procnew
-c      do iprocspl=1,12
-c       if (procnewspl(iprocspl).ne.0) then
-c            procspl(iprocspl)=procnewspl(iprocspl)
-c           !exit
-c       endif
-c     end do
-
-      do ipidspl=1,12
-        if (pidnewspl(ipidspl).ne.0) then
-             pidspl(ipidspl)=pidnewspl(ipidspl)
-c       if (myid==1) write(*,*) 'pidspl changed:',pidspl(ipidspl)
-            !exit
-        endif
-      end do
-
+<<<<<<< HEAD
       if (myid==1) then
               write(*,01506) 'procspl',time,procspl
               write(*,01506) 'pidspl',time,pidspl
 01506 format(a7,e15.6,12i4.3)
       end if
+=======
+>>>>>>> parent of 6ad6dca... fix switching sampling handles: now radius spectrum is fixed, but sampling point switches for more radius options.
       if (ispray==1) then
       if (it == 1) numpart = 0
       part => first_particle
       do while (associated(part))
       !Particle sampling
       !sample 1
-      if (part%pidx == pidspl(1) .and. part%procidx == procspl(1)) then
+      if (part%pidx == 1 .and. part%procidx == 0) then
       write(*,'(a7,2e15.6)') 'tL1:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp1:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp1:  ',time,part%vp(1:3)
@@ -797,7 +770,7 @@ c       if (myid==1) write(*,*) 'pidspl changed:',pidspl(ipidspl)
       
       !Add two more sampling point
       !sample 2
-      if (part%pidx == pidspl(2) .and. part%procidx == procspl(2)) then
+      if (part%pidx == 2 .and. part%procidx == 0) then
       write(*,'(a7,2e15.6)') 'tL2:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp2:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp2:  ',time,part%vp(1:3)
@@ -808,7 +781,7 @@ c       if (myid==1) write(*,*) 'pidspl changed:',pidspl(ipidspl)
       end if
 
       !sample 3
-      if (part%pidx == pidspl(3) .and. part%procidx == procspl(3)) then
+      if (part%pidx == 3 .and. part%procidx == 0) then
       write(*,'(a7,2e15.6)') 'tL3:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp3:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp3:  ',time,part%vp(1:3)
@@ -818,7 +791,7 @@ c       if (myid==1) write(*,*) 'pidspl changed:',pidspl(ipidspl)
       write(*,'(a8,3e16.7)') 'qpqf3: ',time,part%qstar,part%qinf 
       end if
       !sample 4
-      if (part%pidx == pidspl(4) .and. part%procidx == procspl(4)) then
+      if (part%pidx == 1 .and. part%procidx == 1) then
       write(*,'(a7,2e15.6)') 'tL4:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp4:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp4:  ',time,part%vp(1:3)
@@ -828,7 +801,7 @@ c       if (myid==1) write(*,*) 'pidspl changed:',pidspl(ipidspl)
       write(*,'(a8,3e16.7)') 'qpqf4: ',time,part%qstar,part%qinf
       end if
       !sample 5
-      if (part%pidx == pidspl(5) .and. part%procidx == procspl(5)) then
+      if (part%pidx == 2 .and. part%procidx == 1) then
       write(*,'(a7,2e15.6)') 'tL5:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp5:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp5:  ',time,part%vp(1:3)
@@ -838,7 +811,7 @@ c       if (myid==1) write(*,*) 'pidspl changed:',pidspl(ipidspl)
       write(*,'(a8,3e16.7)') 'qpqf5: ',time,part%qstar,part%qinf 
       end if
       !sample 6
-      if (part%pidx == pidspl(6) .and. part%procidx == procspl(6)) then
+      if (part%pidx == 3 .and. part%procidx == 1) then
       write(*,'(a7,2e15.6)') 'tL6:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp6:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp6:  ',time,part%vp(1:3)
@@ -848,7 +821,7 @@ c       if (myid==1) write(*,*) 'pidspl changed:',pidspl(ipidspl)
       write(*,'(a8,3e16.7)') 'qpqf6: ',time,part%qstar,part%qinf
       end if
       !sample 7
-      if (part%pidx == pidspl(7) .and. part%procidx == procspl(7)) then
+      if (part%pidx == 1 .and. part%procidx == 2) then
       write(*,'(a7,2e15.6)') 'tL7:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp7:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp7:  ',time,part%vp(1:3)
@@ -858,7 +831,7 @@ c       if (myid==1) write(*,*) 'pidspl changed:',pidspl(ipidspl)
       write(*,'(a8,3e16.7)') 'qpqf7: ',time,part%qstar,part%qinf
       end if
       !sample 8
-      if (part%pidx == pidspl(8) .and. part%procidx == procspl(8)) then
+      if (part%pidx == 2 .and. part%procidx == 2) then
       write(*,'(a7,2e15.6)') 'tL8:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp8:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp8:  ',time,part%vp(1:3)
@@ -868,7 +841,7 @@ c       if (myid==1) write(*,*) 'pidspl changed:',pidspl(ipidspl)
       write(*,'(a8,3e16.7)') 'qpqf8: ',time,part%qstar,part%qinf
       end if
       !sample 9
-      if (part%pidx == pidspl(9) .and. part%procidx == procspl(9)) then
+      if (part%pidx == 3 .and. part%procidx == 2) then
       write(*,'(a7,2e15.6)') 'tL9:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp9:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp9:  ',time,part%vp(1:3)
@@ -879,7 +852,7 @@ c       if (myid==1) write(*,*) 'pidspl changed:',pidspl(ipidspl)
       end if
 
       !sample 10
-      if (part%pidx ==pidspl(10) .and. part%procidx == procspl(10)) then
+      if (part%pidx == 1 .and. part%procidx == 3) then
       write(*,'(a7,2e15.6)') 'tL10:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp10:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp10:  ',time,part%vp(1:3)
@@ -890,7 +863,7 @@ c       if (myid==1) write(*,*) 'pidspl changed:',pidspl(ipidspl)
       end if
 
       !sample 11
-      if (part%pidx ==pidspl(11) .and. part%procidx ==procspl(11)) then
+      if (part%pidx == 2 .and. part%procidx == 3) then
       write(*,'(a7,2e15.6)') 'tL11:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp11:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp11:  ',time,part%vp(1:3)
@@ -901,7 +874,7 @@ c       if (myid==1) write(*,*) 'pidspl changed:',pidspl(ipidspl)
       end if
 
       !sample 12
-      if (part%pidx ==pidspl(12) .and. part%procidx ==procspl(12)) then
+      if (part%pidx == 3 .and. part%procidx == 3) then
       write(*,'(a7,2e15.6)') 'tL12:  ',time,time-part%t_init
       write(*,'(a7,4e15.6)') 'xp12:  ',time,part%xp(1:3)  !Brian 7/16/14 
       write(*,'(a7,4e15.6)') 'vp12:  ',time,part%vp(1:3)
@@ -10896,16 +10869,13 @@ c     HISTOGRAM (Histog)
       real :: dqfp           !Local radius difference
       real :: Tp,Tf,qstr,qinf,hpmax
       real :: rpinit,rpend!particle temperature and humidity
-      integer,allocatable::pid_tmp(:),proc_tmp(:)
       !Assumes domain goes from [0,xl),[0,yl),[0,zl]
       !Also maintain the number of particles on each proc
 c     if (myid==0) write(*,*) 'time,procid: ',time,part%procidx
 c     if (myid==0) write(*,*) 'time,pid: ',time,part%pidx
 c     if (myid==0) write(*,*) 'time,xp1: ',time,part%xp(1)
-      allocate(pid_tmp(12),proc_tmp(12)) !allocate pid and procid tmp
+
       num_reintro = 0
-      pid_tmp=0 !initialize to zero for every element
-      proc_tmp=0 !initialize to zero for every element
       part => first_particle
       do while (associated(part))
 
@@ -11010,6 +10980,7 @@ c ========================= HISTOGRAM (Histog)  =============================
      +histbins+2,histbins+2,rpinit,tL)
 
 
+<<<<<<< HEAD
         do iprocspl=1,12
         if (part%procidx.eq.procspl(iprocspl)) then
              locproc=iprocspl
@@ -11049,6 +11020,8 @@ c               call MPI_Bcast(procspl,12,
 c    +          mpi_integer,myid,mpi_comm_world,ierr)
         endif
         endif
+=======
+>>>>>>> parent of 6ad6dca... fix switching sampling handles: now radius spectrum is fixed, but sampling point switches for more radius options.
         call destroy_particle  !destroy particle this !Tianze 9/10/15 Ref:Emily
  
         tmp_part => part !store the location of current(next) particle        
@@ -11080,16 +11053,6 @@ c    +          mpi_integer,myid,mpi_comm_world,ierr)
       end if
 
       end do
-c     if (myid==1) write(*,*)'pid_tmp',pid_tmp
-       call mpi_allreduce(pid_tmp,pidnewspl,12,
-     + mpi_integer,mpi_sum,mpi_comm_world,ierr)
-c              call mpi_errhandler_set(mpi_comm_world,mpi_errors_return)
-c      call mpi_allreduce(procnewspl,proc_tmp,12,
-c    + mpi_integer,mpi_sum,mpi_comm_world,ierr)
-c               call mpi_barrier(mpi_comm_world,ierr)
-       if (imndbug.eq.1.and.myid.le.3) then
-       write(*,*)'after Alrd,myid=',myid,'pid',pidnewspl
-       end if
       call mpi_allreduce(num_reintro,tmp_reintro,1,mpi_integer,mpi_sum,
      +       mpi_comm_world,ierr)
 
