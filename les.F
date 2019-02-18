@@ -10799,19 +10799,19 @@ c  if time is zero
 c  Mono-dispsered or Poly-dispersed radius
        if (iszcls .eq. 0) then
        part%radius = radius_init !Brian 7/9/14
- 
-       else if(iszcls .eq. 1 .or. iszcls .eq.3) then
-           call create_random_partsize(rpran)
-           part%radius=rpran
-           if (condsmprp) then
-             if (mod(myid,2)==0) write (*,*) 'rp_ran:',rpran
-           end if
-       else if(iszcls .eq. 2) then
+c      else if(iszcls .eq. 1 .or. iszcls .eq.3) then
+c          call create_random_partsize(rpran)
+c          part%radius=rpran
+c          call regularize_rpinit(rpran,part%radius) 
+c          if (condsmprp) then
+c            if (mod(myid,2)==0) write (*,*) 'rp_ran:',rpran
+c          end if
+       else 
            call create_random_partsize(rpran)
            !Pass part%radius to rpran
            call regularize_rpinit(rpran,part%radius) 
            if (condsmprp) then
-             if (mod(myid,2)==0) write (*,*) 'rp_ran:',rpran
+             if (mod(myid,2)==0) write(*,*)'rp_ran:',part%radius,rpran
            end if
        end if 
       elseif (time .ne. 0.0) then
@@ -12005,10 +12005,10 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       use pars
       use particles
       use con_data
-      if (iSSGF==0 .or. iSSGF==1 .or. iSSGF==2) then
-             Nrp=25
-      else if (iSSGF==3) then
+      if (iSSGF==3) then
              Nrp=2
+      else
+             Nrp=35
       end if
       end subroutine
 
@@ -13995,6 +13995,7 @@ c    !!! 2-D Histograms
         Snscl=Sn(irpmin:irpmax)/sum(Sn(irpmin:irpmax))
       if (myid==0) write(*,*)'Sn(imin:imax),',Sn(irpmin:irpmax)
       if (myid==0) write(*,*)'sumSncrop,',sum(Sn(irpmin:irpmax))
+      if (myid==0) write(*,*) 'Nrp=',Nrp
       if(imndbug==1.and.myid==0) write(*,*)'Sn,',Sn
       if(imndbug==1.and.myid==0) write(*,*)'rpinit,',rpinit
       if(imndbug==1.and.myid==0) write(*,*)'rpmin,',rpmin1
@@ -14247,24 +14248,28 @@ c       if (myid==0) write(*,*) 'format of pstat:', fmtpstat
         real,allocatable :: szcls1(:),szcls2(:),dszcls(:) !index starts from 1
         integer :: indszcls
         allocate(szcls1(Nrp),szcls2(Nrp),dszcls(Nrp))
-        if (Nrp==25) then 
-        szcls1=(/20.0E-6,25.0E-6,30.0E-6,35.0E-6,40.0E-6,
-     +        45.0E-6,50.0E-6,55.0E-6,60.0E-6,70.0E-6,
-     +        80.0E-6,90.0E-6,100.0E-6,115.0E-6,130.0E-6,
-     +        150.0E-6,175.0E-6,200.0E-6,225.0E-6,250.0E-6,
-     +        300.0E-6,350.0E-6,400.0E-6,450.0E-6,500.0E-6/) 
+        if (Nrp==35) then 
+        !lower bounds
+        szcls1=(/19.0E-6,21.0E-6,23.0E-6,25.0E-6,27.0E-6,
+     +        29.0E-6,31.0E-6,33.0E-6,35.0E-6,37.0E-6,
+     +        39.0E-6,41.0E-6,43.0E-6,45.0E-6,47.0E-6,
+     +        49.0E-6,51.0E-6,55.0E-6,59.0E-6,64.0E-6,
+     +        70.0E-6,80.0E-6,90.0E-6,100.0E-6,110.0E-6,
+     +        120.0E-6,130.0E-6,150.0E-6,175.0E-6,200.0E-6,
+     +        230.0E-6,260.0E-6,300.0E-6,350.0E-6,400.0E-6/) 
+        ! upper bounds
+        szcls2=(/21.0E-6,23.0E-6,25.0E-6,27.0E-6,29.0E-6,
+     +        31.0E-6,33.0E-6,35.0E-6,37.0E-6,39.0E-6,
+     +        41.0E-6,43.0E-6,45.0E-6,47.0E-6,49.0E-6,
+     +        51.0E-6,55.0E-6,59.0E-6,64.0E-6,70.0E-6,
+     +        80.0E-6,90.0E-6,100.0E-6,110.0E-6,120.0E-6,
+     +        130.0E-6,150.0E-6,175.0E-6,200.0E-6,230.0E-6,
+     +        260.0E-6,300.0E-6,350.0E-6,400.0E-6,450.0E-6/) 
 
-        szcls2=(/25.0E-6,30.0E-6,35.0E-6,40.0E-6,45.0E-6,
-     +        50.0E-6,55.0E-6,60.0E-6,70.0E-6,80.0E-6,
-     +        90.0E-6,100.0E-6,115.0E-6,130.0E-6,150.0E-6,
-     +        175.0E-6,200.0E-6,225.0E-6,250.0E-6,300.0E-6,
-     +        350.0E-6,400.0E-6,450.0E-6,500.0E-6,600.0E-6/) 
-       end if
-
-        dszcls=0.5*(szcls1-szcls2)
-        szcls1=szcls1+dszcls !lower bound
-        szcls2=szcls2+dszcls !upper bound
         
         indszcls=maxloc(szcls1,DIM=1,MASK=(rpran1in>=szcls1))
         rpran1out=0.5*(szcls1(indszcls)+szcls2(indszcls))
+        else if (Nrp==2)
+        rpran1out=rpran1in
+        end if
         end subroutine
