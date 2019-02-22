@@ -3,6 +3,7 @@ c     ----------------------------------------------------------------------
 c     ----------------------------------------------------------------------
       ! Time step
       integer :: it
+      real,allocatable :: timestamp(:)
       ! Manual Debug mode
       integer :: imndbug
       ! In params.in 
@@ -153,6 +154,10 @@ c     ----------------------------------------------------------------------
       real :: residual(rbins)
       real :: Rep_avg,massfrac !Tianze 9/11/15 !Brian 8/14/14
       real :: dmb,dmm,dmt !Tianze 7/29/15
+      ! For sampling F-component for multiple size, Tianze 2/18/19
+      real,allocatable::Fnum_reintro(:,:),Ftot_reintro(:,:)
+      real,allocatable::Ftmp_reintro(:,:),Fhis_reintro(:,:)
+      real,allocatable :: szcls(:),tnumcls(:),probsz(:)!globally stored size array 
       !Following three lines are all set in the input file 9/18/18
       real :: radius_init,rhow,nuf,rpmax,rpmin,Vpmax,part_grav  
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os
@@ -736,14 +741,17 @@ c --------------- time loop ------------
 c
       !time = 0.37083609E+02
       allocate(pstat(itape,22))
+      allocate(timestamp(itape))
       tzero = time
       call get_dt
+      !LOOP BEGINS BELOW
  9000 continue
       call set_sav(it,iti)
       if (myid==0) then
       write(*,*) 'it,time = ',it,time
       end if
 
+      call record_timestamp(time)
       if (ispray==1) then
       if (it == 1) numpart = 0
       part => first_particle
@@ -977,8 +985,10 @@ c       if (myid==1) write(*,*) 'pstat(2,1,2):',pstat(2,1)
 c       if (myid==2) write(*,*) 'pstat(2,5,3):',pstat(2,5)
 c       if (myid==4) write(*,*) 'pstat(2,20,5):',pstat(2,20)
         call write_histograms(it-itape+1)
+        call write_Freintro(it-itape+1)
 c       call save_pstat
         call clean_histograms
+        call clean_Freintro
 c       call clear_pstat
 c ----------- close pstat file ----------
         end if
@@ -1051,6 +1061,7 @@ c
      
       call get_max
       call get_dt
+      ! CHECK WHEN TO EXIT TIME LOOP
       if (it.ge.itmax) go to 99000
       go to 9000
 c
@@ -10799,23 +10810,25 @@ c  if time is zero
 c  Mono-dispsered or Poly-dispersed radius
        if (iszcls .eq. 0) then
        part%radius = radius_init !Brian 7/9/14
-c      else if(iszcls .eq. 1 .or. iszcls .eq.3) then
-c          call create_random_partsize(rpran)
-c          part%radius=rpran
-c          call regularize_rpinit(rpran,part%radius) 
-c          if (condsmprp) then
-c            if (mod(myid,2)==0) write (*,*) 'rp_ran:',rpran
-c          end if
+       else if(iszcls .eq. 1 .or. iszcls .eq.3) then
+           call create_random_partsize(rpran)
+           part%radius=rpran
+           call regularize_rpinit(rpran,part%radius) 
+           call count_tnumcls(part%radius)
+           if (condsmprp) then
+             if (mod(myid,2)==0) write (*,*) 'rp_ran:',part%radius
+           end if
        else 
            call create_random_partsize(rpran)
            !Pass part%radius to rpran
            call regularize_rpinit(rpran,part%radius) 
+           call count_tnumcls(part%radius)
            if (condsmprp) then
              if (mod(myid,2)==0) write(*,*)'rp_ran:',part%radius,rpran
            end if
        end if 
       elseif (time .ne. 0.0) then
-      part%radius=rpi1
+      part%radius=rpi1 !to ensure size-spectrum is not shifting 1/23/19
       end if
       part%rp_init = part%radius
       part%xp(3)=part%rp_init  !overwrite zp value, Tianze 10/1/2018
@@ -10850,6 +10863,7 @@ c          end if
       include 'mpif.h'
       real :: rhop
       real :: top,bot
+      integer :: itlocal
       integer :: ierr,istage,ix
       integer :: idx_tmp,procidx_tmp
       integer :: tmp_reintro
@@ -10871,7 +10885,12 @@ c     if (myid==0) write(*,*) 'time,procid: ',time,part%procidx
 c     if (myid==0) write(*,*) 'time,pid: ',time,part%pidx
 c     if (myid==0) write(*,*) 'time,xp1: ',time,part%xp(1)
 
+      !calculate local time step within one itape
+      itlocal = mod(it,itape)
+      if (itlocal==0) itlocal=itape
+      !total number counter is reset at each stage
       num_reintro = 0
+      !particle loop
       part => first_particle
       do while (associated(part))
 
@@ -10998,6 +11017,7 @@ c       part%rp_init=rpinit
 c       part%radius=part%rp_init
               !Tianze 8/13/15 !Brian 7/29/14 Currently ignoring Tp and qinfp
         num_reintro = num_reintro +1 
+        call numreintro_class(part%rp_init) 
         !after creating new particle to the beginning, the pointer 'part'
         !is at the location first partcle. So return the particle to the
         !formerly stored location.
@@ -11011,10 +11031,15 @@ c       part%radius=part%rp_init
       end do
       call mpi_allreduce(num_reintro,tmp_reintro,1,mpi_integer,mpi_sum,
      +       mpi_comm_world,ierr)
-
-      if (myid==0) write(*,*) 'time,tmp_reintro: ',time,tmp_reintro
-
-      tot_reintro = tot_reintro + tmp_reintro
+c     call mpi_allreduce(Fnum_reintro(itlocal,:),Ftmp_reintro(itlocal,:)
+c    +,Nrp,mpi_integer,mpi_sum,mpi_comm_world,ierr)   !tmp is the receiver
+      if (myid==0) then
+        write(*,*)'time,tmp_reintro: ',time,tmp_reintro
+c       write(*,*)'time,num_rein,Fnum:',time,num_reintro,
+c    +   Fnum_reintro(itlocal,:) 
+      end if
+      ! if (mod(it,5000)==0) call write
+       tot_reintro = tot_reintro + tmp_reintro
 
 
       end subroutine particle_bcs_nonperiodic
@@ -12024,8 +12049,6 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       integer :: Nr_ran !random generated size class 9/25/18
       real :: xv,yv,zv,ran2,deltaz
       real :: maxx,maxy,maxz
-      real,allocatable :: szcls(:),probsz(:) 
-      allocate(szcls(Nrp),probsz(Nrp))
       !Create the seed for the random number generator:
       call date_and_time(VALUES=values)
       iseed = -(myid+values(8)+values(7)+values(6))
@@ -12136,6 +12159,17 @@ c     real :: EFFc,EFFs,ep,ef,Lv
      
       !call setup the size of particle class !11/02/2018
       call set_partclass
+      !Nrp is now assigned 2/21/2019
+      allocate (Fnum_reintro(itape,Nrp),Ftot_reintro(itape,Nrp))
+      allocate (Fhis_reintro(itape,Nrp),Ftmp_reintro(itape,Nrp))
+      allocate(szcls(Nrp),tnumcls(Nrp),probsz(Nrp))
+      !initialize counting time series 2/21/2019
+      Fnum_reintro(:,:)=0.0
+      Ftmp_reintro(:,:)=0.0
+      Ftot_reintro(:,:)=0.0
+      Ftmp_reintro(:,:)=0.0
+      tnumcls(:)=0.0
+      !allocate here for now, Tianze 2/19/2018
 c     Vpmax = 0.089595 !Tianze 9/11/15
       
 
@@ -12215,7 +12249,9 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       num_reintro = 0
       tot_reintro = 0
       his_reintro = 0 !Tianze9/11/15 
-
+      !Fnum_reintro = 0
+      !Ftot_reintro = 0
+      !Fhis_reintro = 0
       !Initialize the linked list of particles:
       nullify(part,first_particle)
 
@@ -13367,7 +13403,7 @@ c
         if (myid==0) write(*,*) 'path_hist',path_hist
         iblnk = index(path_hist,' ')
         call blnk(iblks)
-        write(iblks(1:7),'(i7.7)') istep
+        write(iblks(1:7),'(i7.7)') istep !the first value used is 5000
         iblks(8:8) = '_'
         write(iblks(9:15),'(i7.7)') (istep+itape)
         call blnk(path_sav_hist)
@@ -13796,6 +13832,15 @@ c    !!! 2-D Histograms
         hist2D_rpitL(:,:)=0.0 
 
         end subroutine clean_histograms
+
+        subroutine clean_Freintro
+        use pars
+        use fields
+        use con_data
+        use con_stats
+        use particles
+        Fnum_reintro(:,:)=0
+        end subroutine
 
         subroutine read_input_file
         use pars
@@ -14242,11 +14287,11 @@ c       if (myid==0) write(*,*) 'format of pstat:', fmtpstat
         use particles
         use fields
         use con_data
-
+        implicit none
         real,intent(in):: rpran1in
         real,intent(out) :: rpran1out 
         real,allocatable :: szcls1(:),szcls2(:),dszcls(:) !index starts from 1
-        integer :: indszcls
+        integer :: indszcls,icls
         allocate(szcls1(Nrp),szcls2(Nrp),dszcls(Nrp))
         if (Nrp==35) then 
         !lower bounds
@@ -14266,10 +14311,175 @@ c       if (myid==0) write(*,*) 'format of pstat:', fmtpstat
      +        130.0E-6,150.0E-6,175.0E-6,200.0E-6,230.0E-6,
      +        260.0E-6,300.0E-6,350.0E-6,400.0E-6,450.0E-6/) 
 
-        
-        indszcls=maxloc(szcls1,DIM=1,MASK=(rpran1in>=szcls1))
+        szcls=0.5*(szcls1+szcls2) !stored globally 2/18/2019 
+        !indszcls=maxloc(szcls1,DIM=1,MASK=(rpran1in>=szcls1))
+        icls=1
+        do while(icls.gt.0) !This loop reports the smallest value>rp
+        if(rpran1in<=szcls1(icls)) exit        
+        icls=icls+1 
+        enddo
+        indszcls=icls-1
         rpran1out=0.5*(szcls1(indszcls)+szcls2(indszcls))
-        else if (Nrp==2)
+        else if (Nrp==2) then
         rpran1out=rpran1in
+        szcls=(/rpmin,rpmax/)
         end if
         end subroutine
+
+        subroutine index_sizecls(rpin,clsrpout)
+        use particles
+        use pars
+        use fields
+        use con_data
+        implicit none 
+
+        real,intent(in)::rpin
+        integer::ipcls
+        integer,intent(out)::clsrpout
+        if (Nrp==2) then
+           if(imndbug==1) write(*,*) 'rpmin=',rpmin,'rpmax=',rpmax
+                if (rpin<1.01*rpmin .and. rpin>0.99*rpmin) then
+                   clsrpout=1
+                  if(imndbug==1) write(*,*) 'rpin==rpmin'
+                else if (rpin<1.01*rpmax .and. rpin>0.99*rpmax) then 
+                  clsrpout=2
+                 end if
+        end if
+
+        ipcls=1
+        if (Nrp==35) then
+           if(imndbug==1) write(*,*) 'szcls=',szcls
+           do while (ipcls.gt.0)
+           if (rpin<=szcls(ipcls)) exit
+           ipcls=ipcls+1
+           end do
+           clsrpout=ipcls
+        end if 
+        if (imndbug==1) write(*,*) 'rpin=',rpin,'clsrpout=',clsrpout
+        end subroutine
+
+
+        subroutine numreintro_class(rpin)
+        use particles
+        use pars
+        use fields
+        use con_data
+        implicit none
+        ! 1. find size index
+        ! call size_class first outside this subroutine 
+        real::rpin
+        integer::irpcls,ittmp
+        call index_sizecls(rpin,irpcls)       
+        ! 2. find time index
+        ittmp=mod(it,itape)
+        if (ittmp==0) ittmp=itape
+        if (imndbug==1) write(*,*) 'Fnum,ittmp=',ittmp,'irpcls=',irpcls
+        ! 3. add reintro number to Ftmp_reintro
+        Fnum_reintro(ittmp,irpcls)=Fnum_reintro(ittmp,irpcls)+1
+        !write(*,*) 'myid=',myid,'Fnum_reintro=',Fnum_reintro(ittmp,:)
+        end subroutine
+
+        subroutine record_timestamp(timenow)
+        use pars
+        use particles
+        use fields
+        use con_data
+        implicit none
+        real,intent(in) :: timenow
+        integer :: itlocal
+        itlocal = mod(it,itape)
+        if (itlocal==0) itlocal = itape
+        timestamp(itlocal)=timenow
+        ! consider write it out later
+        end subroutine
+
+        subroutine write_Freintro(istep) !istep-itape+1
+        use pars
+        use particles
+        use fields
+        use con_data
+        implicit none
+        include 'mpif.h'
+
+        integer::i,j,iblnk,itlocal
+        integer status(mpi_status_size), ierr
+        integer,intent(in) :: istep
+        real :: sumbuf_Fnum(itape,Nrp)
+        real :: sumbuf_tnumcls(Nrp)
+        !file 92000
+        character*90 path_Fnumtt,path_Fnum
+        character cgrid*10, num*3,iblks*16
+        character fmt2Dtt*16,fmt2D*11,fmt2Dnumtt*4, fmt2Dnum*4
+        !setting time step within itape for writing 
+        !istep=it+1-itape
+c       itlocal=mod(istep,itape)
+c       if (itlocal==0) itlocal=itape
+        
+        write(fmt2Dnum,'(i4)') Nrp+1 
+        write(fmt2Dnumtt,'(i4)') Nrp 
+        fmt2D = '('//trim(fmt2Dnum)//'e15.6)'
+        fmt2Dtt='(a15,'//trim(fmt2Dnumtt)//'e15.6)'
+        cgrid = '.le.'
+        write(num,'(i3.3)') itn
+        
+        if (myid==0) write(*,*) 'path_hist',path_hist
+        iblnk = index(path_hist,' ')
+        call blnk(iblks)
+        write(iblks(1:7),'(i7.7)') (istep)
+        iblks(8:8) = '_'
+        write(iblks(9:15),'(i7.7)') (istep+itape)
+        call blnk(path_sav_hist)
+       !reduce Fnum to Ftmp
+c       call mpi_reduce(hist2D_tdTp(:,:),sumbuf2D_tdTp,(histbins+2)**2,
+c    +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
+        if(myid==0) write(*,*) 'sz_Fnum=',size(Fnum_reintro,dim=1)
+        call mpi_reduce(Fnum_reintro(:,:),sumbuf_Fnum(:,:),itape*Nrp,
+     +mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
+        call mpi_reduce(tnumcls(:),sumbuf_tnumcls(:),Nrp,
+     +mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+        if(myid==0) write(*,*) 'sz_Ftmp=',size(sumbuf_Fnum)
+        if(myid==0) write(*,*) 'Ftmp=',sumbuf_Fnum
+        
+        if (myid==0) write(*,*) 'szcls=',szcls
+
+        !write table title when reaching the first itape
+        !File 92000: Fnum time series table
+        path_Fnumtt = path_hist(1:iblnk-1)//'/Fnum_clstitle'//
+     +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
+
+        open (unit=92000,file=path_Fnumtt,
+     +  form='formatted',access='sequential')
+           write(92000,fmt2Dtt) 'size',szcls
+           write(92000,fmt2Dtt) 'count',tnumcls
+        close(92000)
+ 
+
+        !File 92001: Fnum time series table
+        path_Fnum = path_hist(1:iblnk-1)//'/Fnum'//
+     +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
+
+        open (unit=92001,file=path_Fnum,
+     +  form='formatted',access='sequential')
+        do i=1,itape
+           write(92001,fmt2D),timestamp(i),sumbuf_Fnum(i,:) !y-ticks, UPDATE BINV
+        end do
+        close(92001)
+ 
+        end subroutine
+
+        subroutine count_tnumcls(rpin)
+        use pars
+        use particles
+        use fields
+        use con_data
+        include 'mpif.h'
+        real,intent(in)::rpin
+        integer::irpcls
+        irpcls=1
+        ! get size clss
+        call index_sizecls(rpin,irpcls) 
+        ! add counts
+        tnumcls(irpcls)=tnumcls(irpcls)+1
+        end subroutine count_tnumcls
