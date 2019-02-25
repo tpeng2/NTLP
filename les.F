@@ -979,22 +979,6 @@ c
       if(msave .and. istage .eq. 1) then
          call save_p
       endif
-c ========================= WRITE HISTOGRAM =======================
-        if (msave .and. istage .eq. 1) then
-c       if (myid==1) write(*,*) 'pstat(2,1,2):',pstat(2,1)
-c       if (myid==2) write(*,*) 'pstat(2,5,3):',pstat(2,5)
-c       if (myid==4) write(*,*) 'pstat(2,20,5):',pstat(2,20)
-        if (iHcouple==1) then
-        call write_histograms(it-itape+1)
-        end if
-        call write_Freintro(it-itape+1)
-c       call save_pstat
-        call clean_histograms
-        call clean_Freintro
-c       call clear_pstat
-c ----------- close pstat file ----------
-        end if
-
 c
 c --------- get rhs for all equations
 c
@@ -1046,6 +1030,15 @@ c
          !call mpi_barrier(mpi_comm_world,ierr)
          !if (myid==5) write(*,*) 'time part: ',t_f-t_s
       end if
+c -------- WRITE HISTOGRAM =======================
+      ! moved to location when particles are updated
+        if (msave .and. istage .eq. 1) then
+        call write_histograms(it-itape+1)
+        call write_Freintro(it-itape+1)
+        call clean_histograms
+        call clean_Freintro
+        end if
+
       if(mnout .and. istage .eq. 1)  then
           if(l_debug) then
              call print(nprt,it,izs,ize)
@@ -13841,7 +13834,7 @@ c    !!! 2-D Histograms
         use con_data
         use con_stats
         use particles
-        Fnum_reintro(:,:)=0
+        Fnum_reintro(:,:)=0.0
         end subroutine
 
         subroutine read_input_file
