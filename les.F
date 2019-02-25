@@ -984,7 +984,9 @@ c ========================= WRITE HISTOGRAM =======================
 c       if (myid==1) write(*,*) 'pstat(2,1,2):',pstat(2,1)
 c       if (myid==2) write(*,*) 'pstat(2,5,3):',pstat(2,5)
 c       if (myid==4) write(*,*) 'pstat(2,20,5):',pstat(2,20)
+        if (iHcouple==1) then
         call write_histograms(it-itape+1)
+        end if
         call write_Freintro(it-itape+1)
 c       call save_pstat
         call clean_histograms
@@ -14375,7 +14377,7 @@ c       if (myid==0) write(*,*) 'format of pstat:', fmtpstat
         if (ittmp==0) ittmp=itape
         if (imndbug==1) write(*,*) 'Fnum,ittmp=',ittmp,'irpcls=',irpcls
         ! 3. add reintro number to Ftmp_reintro
-        Fnum_reintro(ittmp,irpcls)=Fnum_reintro(ittmp,irpcls)+1
+        Fnum_reintro(ittmp,irpcls)=Fnum_reintro(ittmp,irpcls)+1.0
         !write(*,*) 'myid=',myid,'Fnum_reintro=',Fnum_reintro(ittmp,:)
         end subroutine
 
@@ -14452,7 +14454,7 @@ c    +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
         open (unit=92000,file=path_Fnumtt,
      +  form='formatted',access='sequential')
            write(92000,fmt2Dtt) 'size',szcls
-           write(92000,fmt2Dtt) 'count',tnumcls
+           write(92000,fmt2Dtt) 'count',sumbuf_tnumcls
         close(92000)
  
 
@@ -14481,5 +14483,5 @@ c    +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
         ! get size clss
         call index_sizecls(rpin,irpcls) 
         ! add counts
-        tnumcls(irpcls)=tnumcls(irpcls)+1
+        tnumcls(irpcls)=tnumcls(irpcls)+1.0
         end subroutine count_tnumcls
