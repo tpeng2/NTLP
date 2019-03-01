@@ -1035,6 +1035,7 @@ c -------- WRITE HISTOGRAM =======================
         if (msave .and. istage .eq. 1) then
         call write_histograms(it-itape+1)
         call write_Freintro(it-itape+1)
+        call mpi_barrier(mpi_comm_world,ierr)
         call clean_histograms
         call clean_Freintro
         end if
@@ -14117,7 +14118,7 @@ c       end subroutine
         if (myid==0) write(*,*)'mass weight,',mpweightSn
         ! computer num/vol/mass for particle
         nflxp1=Snscl(1)
-        volp1=4.0/3.0*pi*rpcrop(1)**3
+        volp1=4.0/3.0*pi*rpcrop(1)**3.0
         massp1=volp1*rhow
         ! computer num/vol/mass flux
         totnumflx=Snscl(1)
@@ -14404,7 +14405,7 @@ c       if (myid==0) write(*,*) 'format of pstat:', fmtpstat
         !file 92000
         character*90 path_Fnumtt,path_Fnum
         character cgrid*10, num*3,iblks*16
-        character fmt2Dtt*16,fmt2D*11,fmt2Dnumtt*4, fmt2Dnum*4
+        character fmt2Dtt*16,fmt2D*16,fmt2Dnumtt*4, fmt2Dnum*4
         !setting time step within itape for writing 
         !istep=it+1-itape
 c       itlocal=mod(istep,itape)
@@ -14428,17 +14429,18 @@ c       if (itlocal==0) itlocal=itape
 c       call mpi_reduce(hist2D_tdTp(:,:),sumbuf2D_tdTp,(histbins+2)**2,
 c    +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
+        call mpi_reduce(tnumcls(:),sumbuf_tnumcls(:),Nrp,
+     +mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
         if(myid==0) write(*,*) 'sz_Fnum=',size(Fnum_reintro,dim=1)
         call mpi_reduce(Fnum_reintro(:,:),sumbuf_Fnum(:,:),itape*Nrp,
      +mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
-
-        call mpi_reduce(tnumcls(:),sumbuf_tnumcls(:),Nrp,
-     +mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
         if(myid==0) write(*,*) 'sz_Ftmp=',size(sumbuf_Fnum)
-        if(myid==0) write(*,*) 'Ftmp=',sumbuf_Fnum
+        if(myid==0)write(*,*)'Ftmp@itape=',sumbuf_Fnum(itape,:)
         
         if (myid==0) write(*,*) 'szcls=',szcls
 
+        if(l_root) then !only write from myid==0
         !write table title when reaching the first itape
         !File 92000: Fnum time series table
         path_Fnumtt = path_hist(1:iblnk-1)//'/Fnum_clstitle'//
@@ -14461,7 +14463,7 @@ c    +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
            write(92001,fmt2D),timestamp(i),sumbuf_Fnum(i,:) !y-ticks, UPDATE BINV
         end do
         close(92001)
- 
+        end if 
         end subroutine
 
         subroutine count_tnumcls(rpin)
