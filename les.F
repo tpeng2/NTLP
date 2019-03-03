@@ -10809,8 +10809,8 @@ c  Mono-dispsered or Poly-dispersed radius
        else if(iszcls .eq. 1 .or. iszcls .eq.3) then
            call create_random_partsize(rpran)
            part%radius=rpran
-           call regularize_rpinit(rpran,part%radius) 
-           call count_tnumcls(part%radius)
+c          call regularize_rpinit(rpran,part%radius) 
+c          call count_tnumcls(part%radius)
            if (condsmprp) then
              if (mod(myid,2)==0) write (*,*) 'rp_ran:',part%radius
            end if
@@ -14134,7 +14134,7 @@ c       end subroutine
         volflx=volflx+4.0/3.0*pi*rpcrop(i)**3*Snscl(i)
         ! computer num/vol/mass for particle
         nflxp1=Snscl(i)
-        volp1=4.0/3.0*pi*rpcrop(i)**3
+        volp1=4.0/3.0*pi*rpcrop(i)**3.0
         massp1=volp1*rhow
         ! part number for remaining radius
         numpartSn(i)=int(massfrac*mpweightSn(i)*(rhoa*dmnvol)/(massp1)) 
