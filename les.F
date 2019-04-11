@@ -13988,6 +13988,7 @@ c    !!! 2-D Histograms
         real,allocatable :: rpinit(:),mpinit(:)
         !Sn,Snscl,rpcrop,CDF are global variables
         integer :: irpmax,irpmin
+        integer :: icntmin,icntmax
         integer :: m,n,i,j,imax,imin
         real :: SSGF,SSGF0,SSGF1,SSGF2
         m=1200 !sample radius size
@@ -13998,9 +13999,24 @@ c    !!! 2-D Histograms
         allocate(Sn(m))
         !non-scaled SSGF
         ! find index for useful range
-        irpmax=minloc(rpinit,DIM=1,MASK=(rpinit>rpmax1))-1
-        irpmin=maxloc(rpinit,DIM=1,MASK=(rpinit<=rpmin1))
-        if (iSSGF==0) then
+        !irpmax=minloc(rpinit,DIM=1,MASK=(rpinit>rpmax1))-1
+        !return the first location that satisfies the mask
+        icntmin=1
+        do while(icntmin.gt.0)
+        if (rpinit(icntmin)>rpmax) exit
+        icntmin=icntmin+1
+        end do
+        irpmax=icntmin-1
+        !irpmin=maxloc(rpinit,DIM=1,MASK=(rpinit<=rpmin1))
+        !return the last location that does not satisfy the mask
+        icntmax=1
+        do while(icntmax.gt.0)
+        if (rpinit(icntmax+1).ge.rpmax) exit
+        icntmax=icntmax+1
+        end do
+        irpmin=icntmax
+
+       if (iSSGF==0) then
          do i=1,m
           SSGF=SSGF0(rpinit(i))
           Sn(i)=SSGF
@@ -14056,9 +14072,17 @@ c    !!! 2-D Histograms
         use con_data
         use con_stats
         use particles
+        implicit none
         real,intent(out) :: rpran1
         real :: ran2
-        rpran1=rpcrop(minloc(CDF,DIM=1,MASK=(CDF>=ran2(iseed))))
+        integer :: icnt
+        icnt=1
+        do while(icnt.gt.0)
+        if (CDF(icnt).ge.ran2(iseed)) exit
+        icnt=icnt+1
+        end do
+        rpran1=rpcrop(icnt)
+        !rpran1=rpcrop(minloc(CDF,DIM=1,MASK=(CDF>=ran2(iseed))))
         end subroutine
         
 c       subroutine create_binary_partsize(rp1,rp2,rpbin)
