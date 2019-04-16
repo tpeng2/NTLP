@@ -1,4 +1,4 @@
-c     ----------------------------------------------------------------------
+c----------------------------------------------------------------------
       module pars
 c     ----------------------------------------------------------------------
       ! Time step
@@ -17,14 +17,27 @@ c     ----------------------------------------------------------------------
      +     iocean, method, idebug, iz_space,
      +     ivis0, ifix_dt, new_vis,
      +     ispray,icouple,iTcouple, 
-     +     iHcouple,ievap,iszcls,iSSGF,ivpran,irpsmp
+     +     iHcouple,ievap,iszcls,iSSGF,ivpran,irpsmp,impscl,itriavg,
+     +     impmnl
 c------- !iHcouple also controls TEcouple
+c----  ! A. SIZE CLASS      
          !iszcls spray size
-         !iszcls = 0, continuous class, mono or poly
+         !iszcls = 0, continuous class, mono 
          !iszcls = 1, poly-continuous size, 
-         !iszcls = 2, poly-regularized size,
-         !iszcls = 3, SSGF size normalized by mass (volume) 
+         !iszcls = 2, bi-dispersed,
+         !iszcls = 3, tri-dispersed (radius average),
+                !itriavg=0, radius average
+                !itriavg=1, area average
+                !impmnl=0, automatic generate intermediate size
+                !impmnl=1, manual input intermediate size
+         !iszcls = 4, hexa-dispersed size (maunal input)
+                !impmnl=0, automatic generate intermediate size
+                !impmnl=1, manual input intermediate size
+         !iszcls = 5, 35 sizes, size range embedded in the code  
+c---- ! B. SSGF (shape)
         ! iSSGF=0 (uniform),1(A98),2(MV14),3(binary equal)
+c---- ! C. Scale the mass
+        !impscl=0, follow SSGF, =1, SSGF scaled again by mass
 c    ---------------- global constant numbers ---------
       real :: pi ! 
 ! Set the scalar boundary condition based on isfc
@@ -160,6 +173,8 @@ c     ----------------------------------------------------------------------
       real,allocatable :: szcls(:),tnumcls(:),probsz(:)!globally stored size array 
       !Following three lines are all set in the input file 9/18/18
       real :: radius_init,rhow,nuf,rpmax,rpmin,Vpmax,part_grav  
+      real :: rp1,rp2,rp3,rp4,rp5,rp6
+      real :: phm1,phm2,phm3,phm4,phm5,phm6
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os
       real :: m_s,Sal,Ms,delta_vis,U10 
       ! U10 only for SSGF
@@ -245,6 +260,7 @@ c     =========== Particle Type ===========
       !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
       type :: particle
       integer :: pidx,procidx !add real-time szcls, initial known
+      integer :: rpind !add particle size index
       real :: vp(3),xp(3),uf(3),xrhs(3),vrhs(3),vp_init(3),Tp,Tprhs_s 
                                            !Tianze 6/17/16!Brian 7/29/14
       real :: Tprhs_L, Tf,radius,radrhs,qinf,qstar !Brian 7/29/14
@@ -10803,30 +10819,33 @@ c         pcount = 0
       part%Tf = Tp !Assume Init fluid value is same as Tp
 c  if time is zero
       if (time .eq. 0.0) then
+      part%radius=rpi1
+              ! below are commented out on 4/12/2019
 c  Mono-dispsered or Poly-dispersed radius
-       if (iszcls .eq. 0) then
-       part%radius = radius_init !Brian 7/9/14
-       else if(iszcls .eq. 1 .or. iszcls .eq.3) then
-           call create_random_partsize(rpran)
-           part%radius=rpran
+c      if (iszcls .eq. 0) then
+c      part%radius = radius_init !Brian 7/9/14
+c      else if(iszcls .eq. 1 .or. iszcls .eq.3) then
+c          call create_random_partsize(rpran)
+c          part%radius=rpran
 c          call regularize_rpinit(rpran,part%radius) 
 c          call count_tnumcls(part%radius)
-           if (condsmprp) then
-             if (mod(myid,2)==0) write (*,*) 'rp_ran:',part%radius
-           end if
-       else 
-           call create_random_partsize(rpran)
-           !Pass part%radius to rpran
-           call regularize_rpinit(rpran,part%radius) 
-           call count_tnumcls(part%radius)
-           if (condsmprp) then
-             if (mod(myid,2)==0) write(*,*)'rp_ran:',part%radius,rpran
-           end if
-       end if 
+c          if (condsmprp) then
+c            if (mod(myid,2)==0) write (*,*) 'rp_ran:',part%radius
+c          end if
+c      else 
+c          call create_random_partsize(rpran)
+c          !Pass part%radius to rpran
+c          call regularize_rpinit(rpran,part%radius) 
+c          call count_tnumcls(part%radius)
+c          if (condsmprp) then
+c            if (mod(myid,2)==0) write(*,*)'rp_ran:',part%radius,rpran
+c          end if
+c      end if 
       elseif (time .ne. 0.0) then
       part%radius=rpi1 !to ensure size-spectrum is not shifting 1/23/19
       end if
       part%rp_init = part%radius
+      call index_sizecls(part%rp_init,part%rpind)
       part%xp(3)=part%rp_init  !overwrite zp value, Tianze 10/1/2018
       part%uf(1:3) = 0.0
       part%qinf = 0.0 !Tianze 9/28/15 !qinfp  !Brian 7/14/14
@@ -11013,7 +11032,7 @@ c       part%rp_init=rpinit
 c       part%radius=part%rp_init
               !Tianze 8/13/15 !Brian 7/29/14 Currently ignoring Tp and qinfp
         num_reintro = num_reintro +1 
-        call numreintro_class(part%rp_init) 
+        if(iszcls>0) call numreintro_class(part%rp_init) 
         !after creating new particle to the beginning, the pointer 'part'
         !is at the location first partcle. So return the particle to the
         !formerly stored location.
@@ -12026,9 +12045,17 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       use pars
       use particles
       use con_data
-      if (iSSGF==3) then
+      if (iszcls==0) then
+             Nrp=1
+      else if (iszcls==1) then
+             Nrp=(rpmax-rpmin)/5e-7 
+      else if (iszcls==2) then
              Nrp=2
-      else
+      else if (iszcls==3) then
+             Nrp=3
+      else if (iszcls==4) then
+             Nrp=6
+      else if (iszcls==5) then
              Nrp=35
       end if
       end subroutine
@@ -12040,11 +12067,14 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       use con_data
       implicit none
       include 'mpif.h' 
+      integer :: ierr
       integer :: values(8)
       integer :: idx,ix
       integer :: Nr_ran !random generated size class 9/25/18
       real :: xv,yv,zv,ran2,deltaz
       real :: maxx,maxy,maxz
+      real :: rpnewtmp,mwnewtmp
+      real :: pmass,totpmass
       !Create the seed for the random number generator:
       call date_and_time(VALUES=values)
       iseed = -(myid+values(8)+values(7)+values(6))
@@ -12059,7 +12089,7 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       deltaz = zmax-zmin
       if (iszcls.ne.0) then
       call calc_truc_CDF(rpmin,rpmax)!Defind Sn,Sntruc,CDF
-      call calc_total_tnumpart(massfrac,tnumpart) !assign massfraction  
+c     call calc_total_tnumpart(massfrac,tnumpart) !assign massfraction  
       endif
       if (myid==0) write(*,*) 'Snscl(2)',Snscl !correct
       if (myid==0) write(*,*)'tnumpart,',tnumpart
@@ -12067,26 +12097,66 @@ c     tnumpart = 424643 !Tianze 8/27/15 r25p1new !1036730
       !tnumpart = 2248907
       !tnumpart = 150016
       !tnumpart = 66350
-      numpart = tnumpart/numprocs
-      if (myid == 0) then
-      numpart = numpart + MOD(tnumpart,numprocs)
-      endif
+c     numpart = tnumpart/numprocs
+c     if (myid == 0) then
+c     numpart = numpart + MOD(tnumpart,numprocs)
+c     endif
 
       !Initialize the linked list of particles:
-      nullify(part,first_particle)
+c     nullify(part,first_particle)
       
       !Now initialize all particles with a random location on that processor
       maxx=0.0
       maxy=0.0
       maxz=0.0
-      do idx=1,numpart
+      !Method 1 (for constant number assgined first)
+c     do idx=1,numpart
+c     xv = ran2(iseed)*(xmax-xmin) + xmin
+c     yv = ran2(iseed)*(ymax-ymin) + ymin
+c     zv = ran2(iseed)*(zl-2.0*delta_vis) + delta_vis     !Brian 2/20/15 No droplets in viscous region
+c     call create_particle((/xv,yv,zv/),(/0.01,0.0,0.0/),
+c    +                   Tbot(1),idx,myid,radius_init)  !Tianze 8/13/15 !Brian 7/29/14 Currently ignoring Tp and qinfp
+c     end do
+
+      ! April 2019, to have a constant water mass
+      ! Method 2, assign mass to each core, and then 
+      ! set numpart = 0
+      numpart = 0
+      idx=0
+      ! Begin do loop for generating numpart
+      totpmass=massfrac*(rhoa*xl*yl*zl)
+      pmass=totpmass/numprocs
+      if(myid==1)then
+      write(*,*) 'myid=',myid,'pmass=',pmass,'totpmass=',totpmass
+      endif
+      do while(pmass.ge.0.0)
+      idx=idx+1
+      !generate random (x,y,z) locations
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
-      zv = ran2(iseed)*(zl-2.0*delta_vis) + delta_vis     !Brian 2/20/15 No droplets in viscous region
+      zv = ran2(iseed)*(zl-2.0*delta_vis) + delta_vis     
+      !Brian 2/20/15 No droplets in viscous region
+      ! draw one particle size
+      ! April 2019, add iszcls selection in create_random_partsize
+      call create_random_partsize(rpnewtmp)
+      ! calculate particle (water) mass
+      mwnewtmp=rhow*4.0/3.0*pi*rpnewtmp**3.0
+      ! create particle with this radius 
       call create_particle((/xv,yv,zv/),(/0.01,0.0,0.0/),
-     +                   Tbot(1),idx,myid,radius_init)  !Tianze 8/13/15 !Brian 7/29/14 Currently ignoring Tp and qinfp
+     +                   Tbot(1),idx,myid,rpnewtmp) 
+      ! add one more to particle number in this processor
+      numpart=numpart + 1
+      ! calculate remaining mass
+      pmass=pmass-mwnewtmp
+      if(myid==1)then
+      write(*,*) 'myid1,rpnewtmp=',rpnewtmp,',mwnewtmp=',mwnewtmp
+      endif
+      
+      if(myid==1)then
+      write(*,*) 'myid1,pmass=',pmass,'idx=',idx,'numpart=',numpart
+      endif
       end do
-
+      ! initialize the particle source term
       partTsrc = 0.0
       partTsrc_t = 0.0
       partHsrc = 0.0
@@ -12094,6 +12164,11 @@ c     tnumpart = 424643 !Tianze 8/27/15 r25p1new !1036730
       partTEsrc = 0.0
       partTEsrc_t = 0.0
 
+      ! calculate total particle number
+      call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,
+     +       mpi_comm_world,ierr)
+
+      write(*,*)'myid=',myid,',numpart=',numpart,',tot=',tnumpart
 
       end subroutine particle_init
 
@@ -12254,7 +12329,7 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       !Set up MPI datatypes for sending particle information
       !MUST UPDATE IF THINGS ARE ADDED/REMOVED FROM PARTICLE STRUCTURE
       !for type particle
-      nintegers = 2 !pidx,procidx
+      nintegers = 3 !pidx,procidx,rpind
       nreals = 6*3+10+1 !3*5+9 reals (eg. Tp,Tprhs,Tf,...rp_init) 
       npointers = 2 
 
@@ -13854,7 +13929,7 @@ c    !!! 2-D Histograms
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,ispray,
      +         icouple,iTcouple,iHcouple,ievap,iszcls,iSSGF,ivpran,
-     +         irpsmp
+     +         irpsmp,impscl,itriavg,impmnl
  
         ! 11 grid parameters
         namelist /grid_params/ ncpu_s,Uo,TtopC,TbotC,RHT,RHB,
@@ -13873,7 +13948,8 @@ c    !!! 2-D Histograms
         ! CppCpa is calculated in this file later
         namelist /constants/ radius_init,rhow,nuf,
      +         Cpp,Cpa,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os,
-     +         Sal,Ms,delta_vis,rpmax,rpmin
+     +         Sal,Ms,delta_vis,rpmax,rpmin,
+     +         rp1,rp2,rp3,rp4,rp5,rp6,phm1,phm2,phm3,phm4,phm5,phm6
         ! 25 params for partical statistics for PDF
         namelist /PDF/tL1,tL2,dTp1,dTp2,drp1,drp2,dup1,dup2,dvp1,dvp2,
      +         dwp1,dwp2,dTfp1,dTfp2,dqfp1,dqfp2,Tp1,Tp2,
@@ -13985,10 +14061,11 @@ c    !!! 2-D Histograms
         use particles
         implicit none
         real,intent(in) :: rpmax1,rpmin1
+        real :: rpmed
         real,allocatable :: rpinit(:),mpinit(:)
         !Sn,Snscl,rpcrop,CDF are global variables
-        integer :: irpmax,irpmin
-        integer :: icntmin,icntmax
+        integer :: irpmax,irpmin,irpmed,irpmono
+        integer :: icntmin,icntmax,icntmed
         integer :: m,n,i,j,imax,imin
         real :: SSGF,SSGF0,SSGF1,SSGF2
         m=1200 !sample radius size
@@ -14003,44 +14080,74 @@ c    !!! 2-D Histograms
         !return the first location that satisfies the mask
         icntmin=1
         do while(icntmin.gt.0)
-        if (rpinit(icntmin)>rpmax) exit
+        if (rpinit(icntmin)>rpmin1) exit
         icntmin=icntmin+1
         end do
-        irpmax=icntmin-1
+        irpmin=icntmin-1
         !irpmin=maxloc(rpinit,DIM=1,MASK=(rpinit<=rpmin1))
         !return the last location that does not satisfy the mask
         icntmax=1
         do while(icntmax.gt.0)
-        if (rpinit(icntmax+1).ge.rpmax) exit
+        if (rpinit(icntmax+1).gt.rpmin1) exit
         icntmax=icntmax+1
         end do
-        irpmin=icntmax
-
-       if (iSSGF==0) then
-         do i=1,m
-          SSGF=SSGF0(rpinit(i))
-          Sn(i)=SSGF
-         end do
-        else if (iSSGF==1) then
-         do i=1,m
-        if(myid==0) write(*,*) 'U10 read as ',U10 
-          SSGF=SSGF1(rpinit(i),U10)
-          Sn(i)=SSGF
-         end do
-        else if (iSSGF==2) then
-         do i=1,m
-          SSGF=SSGF2(rpinit(i))
-          Sn(i)=SSGF
-         end do
-        else if (iSSGF==3) then
+        irpmax=icntmax
+        ! medium size
+        icntmed=1
+        rpmed=0.5*(rpmax1+rpmin1)
+        do while(icntmed.gt.0)
+        if (rpinit(icntmed).gt.rpmed) exit
+        icntmed=icntmed+1
+        end do
+        irpmed=icntmed-1
+        ! new way to assign SSGF here 4/10/2019
+        ! SIZE CLASS 0: Mono-disperse
+        if (iszcls==0.and.irpmin==irpmax) then
+                irpmono=irpmin
+                Sn=1e-16
+        Sn(irpmono)=1.0 !equivalent to irpmax
+        ! SIZE CLASS 1:Poly-disperse continuous
+        else if (iszcls==1) then
+           !SSGF 0: UNIFORM
+           if (iSSGF==0) Sn=1.0
+           !SSGF 1: A98
+           if (iSSGF==1) then
+             do i=1,m
+             SSGF=SSGF1(rpinit(i),U10)
+             Sn(i)=SSGF
+             end do
+           end if
+           !SSGF 2: Veron 2014
+           if (iSSGF==2) then
+             do i=1,m
+             SSGF=SSGF2(rpinit(i))
+             Sn(i)=SSGF
+             end do
+           end if
+        ! SSGF CLASS 2: Bi-disperse
+        else if (iszcls==2) then
          do i=1,m
           SSGF=1e-16
           Sn(i)=SSGF   
          end do
          Sn(irpmin)=1.0
          Sn(irpmax)=1.0
+        ! Tri-disperse
+        else if(iszcls==3) then
+         do i=1,m
+          SSGF=1e-16
+          Sn(i)=SSGF   
+         end do
+         !size 1
+         Sn(irpmin)=1.0
+         !size 2
+         Sn(irpmed)=1.0
+         !size 3
+         Sn(irpmax)=1.0
         end if
-        if(iszcls==3) Sn=Sn/mpinit !normalize flux by its mass
+        ! If SSGF is scaled by it's mass
+        ! impscl==0 no scale, impscl==1 
+        if(impscl==1) Sn=Sn/mpinit !normalize flux by its mass
         if (myid==0) write(*,*)'iSSGF,',iSSGF
         if (myid==0) write(*,*)'rpinit(2),',rpinit(2)
         if (myid==0) write(*,*)'Sn(2),',Sn(2)
@@ -14076,12 +14183,17 @@ c    !!! 2-D Histograms
         real,intent(out) :: rpran1
         real :: ran2
         integer :: icnt
-        icnt=1
-        do while(icnt.gt.0)
-        if (CDF(icnt).ge.ran2(iseed)) exit
-        icnt=icnt+1
-        end do
-        rpran1=rpcrop(icnt)
+        ! Mono-disperse
+        if(iszcls==0) rpran1=radius_init
+        ! Polydisperse: continuous
+        if (iszcls.ge.1) then
+         icnt=1
+         do while(icnt.gt.0)
+         if (CDF(icnt).ge.ran2(iseed)) exit
+         icnt=icnt+1
+         end do
+         rpran1=rpcrop(icnt)
+        end if
         !rpran1=rpcrop(minloc(CDF,DIM=1,MASK=(CDF>=ran2(iseed))))
         end subroutine
         
@@ -14129,8 +14241,8 @@ c       end subroutine
         if (myid==0) write(*,*)'rpcrop',rpcrop
         if (myid==0) write(*,*)'pi=',pi
         if (myid==0) write(*,*)'mass_part',mpcrop
-        ! So if iszcls==3, SSGF is mass-normalized (numberflx*partmass)
-        if (iszcls==3) then
+        ! So if impscl is not 0, SSGF is mass-normalized (numberflx*partmass)
+        if (impscl.ne.0) then
         mpweightSn=(Snscl*mpcrop)/sum(Snscl*mpcrop)
         else
         mpweightSn=(Snscl)/sum(Snscl)
@@ -14504,3 +14616,5 @@ c    +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
         ! add counts
         tnumcls(irpcls)=tnumcls(irpcls)+1.0
         end subroutine count_tnumcls
+        
+        
