@@ -17,8 +17,8 @@ c     ----------------------------------------------------------------------
      +     iocean, method, idebug, iz_space,
      +     ivis0, ifix_dt, new_vis,
      +     ispray,icouple,iTcouple, 
-     +     iHcouple,ievap,iszcls,iSSGF,ivpran,irpsmp,impscl,itriavg,
-     +     impmnl
+     +     iHcouple,ievap,iszcls,iSSGF,ivpran,irpsmp,iFnumsmp,
+     +     impscl,impintv,impmnl
 c------- !iHcouple also controls TEcouple
 c----  ! A. SIZE CLASS      
          !iszcls spray size
@@ -26,8 +26,8 @@ c----  ! A. SIZE CLASS
          !iszcls = 1, poly-continuous size, 
          !iszcls = 2, bi-dispersed,
          !iszcls = 3, tri-dispersed (radius average),
-                !itriavg=0, radius average
-                !itriavg=1, area average
+                !impintv=0, radius average
+                !impintv=1, area average
                 !impmnl=0, automatic generate intermediate size
                 !impmnl=1, manual input intermediate size
          !iszcls = 4, hexa-dispersed size (maunal input)
@@ -170,11 +170,16 @@ c     ----------------------------------------------------------------------
       ! For sampling F-component for multiple size, Tianze 2/18/19
       real,allocatable::Fnum_reintro(:,:),Ftot_reintro(:,:)
       real,allocatable::Ftmp_reintro(:,:),Fhis_reintro(:,:)
-      real,allocatable :: szcls(:),tnumcls(:),probsz(:)!globally stored size array 
+      real,allocatable :: tnumgen(:),tnumcls(:),probsz(:)!globally stored size array 
+      !for smallest rp incremental
+      real :: rp_inc
       !Following three lines are all set in the input file 9/18/18
-      real :: radius_init,rhow,nuf,rpmax,rpmin,Vpmax,part_grav  
+      real,allocatable :: rpsmp(:)
+      integer,allocatable::irpind(:)
+      real :: radius_init,rhow,nuf,rpmax,rpmed,rpmin,Vpmax,part_grav  
       real :: rp1,rp2,rp3,rp4,rp5,rp6
-      real :: phm1,phm2,phm3,phm4,phm5,phm6
+      real :: phmt1,phmt2,phmt3 !tri-size
+      real :: phm1,phm2,phm3,phm4,phm5,phm6 !hex-size
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os
       real :: m_s,Sal,Ms,delta_vis,U10 
       ! U10 only for SSGF
@@ -707,7 +712,6 @@ c
       if (iti.eq.0)  then
          igrdr = 2
          case = case_inp
-         call thermal_and_part_prop
          call init(Cpa,rhoa,Mw,Ru)
          call setup(it)
 
@@ -737,7 +741,6 @@ c
       else
          igrdr = 3
          call restart
-         call thermal_and_part_prop
 c         call dns_vis
 c         call get_max
          call setup(it)
@@ -1050,10 +1053,10 @@ c -------- WRITE HISTOGRAM =======================
       ! moved to location when particles are updated
         if (msave .and. istage .eq. 1) then
         call write_histograms(it-itape+1)
-        call write_Freintro(it-itape+1)
+        if(iFnumsmp==1)  call write_Freintro(it-itape+1)
         call mpi_barrier(mpi_comm_world,ierr)
         call clean_histograms
-        call clean_Freintro
+        if(iFnumsmp==1)  call clean_Freintro
         end if
 
       if(mnout .and. istage .eq. 1)  then
@@ -10818,32 +10821,7 @@ c         pcount = 0
       part%Tp = Tp
       part%Tf = Tp !Assume Init fluid value is same as Tp
 c  if time is zero
-      if (time .eq. 0.0) then
-      part%radius=rpi1
-              ! below are commented out on 4/12/2019
-c  Mono-dispsered or Poly-dispersed radius
-c      if (iszcls .eq. 0) then
-c      part%radius = radius_init !Brian 7/9/14
-c      else if(iszcls .eq. 1 .or. iszcls .eq.3) then
-c          call create_random_partsize(rpran)
-c          part%radius=rpran
-c          call regularize_rpinit(rpran,part%radius) 
-c          call count_tnumcls(part%radius)
-c          if (condsmprp) then
-c            if (mod(myid,2)==0) write (*,*) 'rp_ran:',part%radius
-c          end if
-c      else 
-c          call create_random_partsize(rpran)
-c          !Pass part%radius to rpran
-c          call regularize_rpinit(rpran,part%radius) 
-c          call count_tnumcls(part%radius)
-c          if (condsmprp) then
-c            if (mod(myid,2)==0) write(*,*)'rp_ran:',part%radius,rpran
-c          end if
-c      end if 
-      elseif (time .ne. 0.0) then
-      part%radius=rpi1 !to ensure size-spectrum is not shifting 1/23/19
-      end if
+      part%radius=rpi1 !fed by call create_random_partsize 04/20/19
       part%rp_init = part%radius
       call index_sizecls(part%rp_init,part%rpind)
       part%xp(3)=part%rp_init  !overwrite zp value, Tianze 10/1/2018
@@ -10860,6 +10838,14 @@ c      end if
       part%t_init = time
       part%vp_init = vp(1:3)
       part%zp_max = part%xp(3) !part%xp(3) has already been assigned
+      !counting numbers
+      if (time.eq.0.0) then !t=0
+        if (condsmprp.and.mod(myid,2)==0)then
+          write (*,'(a12,1e15.6,a12,i3)') 'rp_ran:',part%radius,
+     +  'part%rpind=',part%rpind
+        end if
+      call count_tnumgen(part%radius,part%rpind)
+      end if
       end subroutine create_particle
       
       function dFdr_uniform(r)
@@ -11032,7 +11018,9 @@ c       part%rp_init=rpinit
 c       part%radius=part%rp_init
               !Tianze 8/13/15 !Brian 7/29/14 Currently ignoring Tp and qinfp
         num_reintro = num_reintro +1 
-        if(iszcls>0) call numreintro_class(part%rp_init) 
+        if(iszcls>0.and.iFnumsmp==1) then
+                 call numreintro_class(part%rp_init,part%rpind) 
+        end if
         !after creating new particle to the beginning, the pointer 'part'
         !is at the location first partcle. So return the particle to the
         !formerly stored location.
@@ -11044,18 +11032,22 @@ c       part%radius=part%rp_init
       end if
 
       end do
+      ! total reintro tnumpart
       call mpi_allreduce(num_reintro,tmp_reintro,1,mpi_integer,mpi_sum,
      +       mpi_comm_world,ierr)
-c     call mpi_allreduce(Fnum_reintro(itlocal,:),Ftmp_reintro(itlocal,:)
-c    +,Nrp,mpi_integer,mpi_sum,mpi_comm_world,ierr)   !tmp is the receiver
+      ! debug mode: categorized reintro tnumpart
+      ! unnecessary for normal runs
+      if (imndbug.ne.0) then
+      call mpi_allreduce(Fnum_reintro(itlocal,:),Ftmp_reintro(itlocal,:)
+     +,Nrp,mpi_integer,mpi_sum,mpi_comm_world,ierr)   !tmp is the receiver
       if (myid==0) then
         write(*,*)'time,tmp_reintro: ',time,tmp_reintro
-c       write(*,*)'time,num_rein,Fnum:',time,num_reintro,
-c    +   Fnum_reintro(itlocal,:) 
+        write(*,*)'time,num_rein,Fnum:',time,num_reintro,
+     +   Fnum_reintro(itlocal,:) 
       end if
-      ! if (mod(it,5000)==0) call write
-       tot_reintro = tot_reintro + tmp_reintro
-
+      end if
+      
+      tot_reintro = tot_reintro + tmp_reintro
 
       end subroutine particle_bcs_nonperiodic
 
@@ -12045,10 +12037,14 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       use pars
       use particles
       use con_data
+      implicit none
+      integer :: ii
+      real::drpmm ! difference between min and max rp, for Nrp=6
+      real,allocatable :: rp35a(:),rp35b(:),rp35(:)
       if (iszcls==0) then
              Nrp=1
       else if (iszcls==1) then
-             Nrp=(rpmax-rpmin)/5e-7 
+             Nrp=(rpmax-rpmin+1e-9)/rp_inc + 1
       else if (iszcls==2) then
              Nrp=2
       else if (iszcls==3) then
@@ -12058,6 +12054,82 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       else if (iszcls==5) then
              Nrp=35
       end if
+      !print Nrp
+      allocate(irpind(Nrp),rpsmp(Nrp))
+      !set particle for each size
+      drpmm=(rpmax-rpmin)/(Nrp-1) !rpmax-rpmin
+      if(myid==1) write(*,*)'size class, Nrp=',Nrp,'increment',drpmm
+      if (iszcls==0) then
+             rpsmp=radius_init
+       !Poly-continuous
+       else if (iszcls==1) then
+            irpind(1)=1
+            rpsmp(1)=rpmin
+            do ii=2,Nrp
+               irpind(ii)=ii
+               rpsmp(ii)=rpsmp(ii-1)+rp_inc
+            end do
+       !bi-size
+       else if (iszcls==2) then
+            irpind=(/1,2/)
+            rpsmp=(/rpmin,rpmax/) 
+       !tri-size
+       else if (iszcls==3) then
+            irpind=(/1,2,3/)
+            if (impintv==0) then
+                 rpmed=0.5*(rpmax+rpmin) !average size
+            else if (impintv==1) then
+                 rpmed=sqrt(0.5*(rpmax**2+rpmin**2)) !average area
+            else if (impintv==2) then
+                 rpmed=sqrt(rpmax*rpmin) !geometric mean
+            end if
+            rpsmp=(/rpmin,rpmed,rpmax/)
+       !Hex-size
+       else if (iszcls==4) then
+              Nrp=6
+              irpind=(/1,2,3,4,5,6/)
+              if(impmnl==1) then
+                  rpsmp=(/rp1,rp2,rp3,rp4,rp5,rp6/)
+              else 
+                  rpsmp(1)=rpmin
+                  do ii =2,Nrp
+                  rpsmp(ii)=drpmm+rpsmp(ii-1)
+                  end do
+              end if
+       !35-size
+       else if (iszcls==5) then
+             allocate(rp35a(Nrp),rp35b(Nrp))
+           !lower bounds
+          if(impmnl==1) then
+          rp35a=(/19.0E-6,21.0E-6,23.0E-6,25.0E-6,27.0E-6,
+     +          29.0E-6,31.0E-6,33.0E-6,35.0E-6,37.0E-6,
+     +          39.0E-6,41.0E-6,43.0E-6,45.0E-6,47.0E-6,
+     +          49.0E-6,51.0E-6,55.0E-6,59.0E-6,64.0E-6,
+     +          70.0E-6,80.0E-6,90.0E-6,100.0E-6,110.0E-6,
+     +          120.0E-6,130.0E-6,150.0E-6,175.0E-6,200.0E-6,
+     +          230.0E-6,260.0E-6,300.0E-6,350.0E-6,400.0E-6/) 
+          ! upper bounds
+          rp35b=(/21.0E-6,23.0E-6,25.0E-6,27.0E-6,29.0E-6,
+     +          31.0E-6,33.0E-6,35.0E-6,37.0E-6,39.0E-6,
+     +          41.0E-6,43.0E-6,45.0E-6,47.0E-6,49.0E-6,
+     +          51.0E-6,55.0E-6,59.0E-6,64.0E-6,70.0E-6,
+     +          80.0E-6,90.0E-6,100.0E-6,110.0E-6,120.0E-6,
+     +          130.0E-6,150.0E-6,175.0E-6,200.0E-6,230.0E-6,
+     +          260.0E-6,300.0E-6,350.0E-6,400.0E-6,450.0E-6/) 
+        
+          rp35=0.5*(rp35a+rp35b) !stored globally 2/18/2019 
+          irpind=(/(ii,ii=1,Nrp)/)
+          rpsmp=rp35
+         else 
+              rpsmp(1)=rpmin
+              do ii =2,Nrp
+                  rpsmp(ii)=drpmm+rpsmp(ii-1)
+              end do
+         end if
+      end if
+ 
+      !verify
+      if (myid==0) write(*,*) 'rpsmp generated:',rpsmp
       end subroutine
 
 
@@ -12067,30 +12139,24 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       use con_data
       implicit none
       include 'mpif.h' 
-      integer :: ierr
+      integer :: istatus(mpi_status_size), ierr, fh
       integer :: values(8)
-      integer :: idx,ix
+      integer :: idx,ix,indrp,icls
       integer :: Nr_ran !random generated size class 9/25/18
       real :: xv,yv,zv,ran2,deltaz
       real :: maxx,maxy,maxz
       real :: rpnewtmp,mwnewtmp
       real :: pmass,totpmass
+      real :: sumbuf_tnumgen(Nrp)
       !Create the seed for the random number generator:
       call date_and_time(VALUES=values)
       iseed = -(myid+values(8)+values(7)+values(6))
-
-!      !Initialize particle number residual to 0:
-!      residual(1:rbins) = 0.0
 
       !Initialize ngidx, the particle global index
       ngidx = 1
   
       !For the channel case, set the total number of particles:
       deltaz = zmax-zmin
-      if (iszcls.ne.0) then
-      call calc_truc_CDF(rpmin,rpmax)!Defind Sn,Sntruc,CDF
-c     call calc_total_tnumpart(massfrac,tnumpart) !assign massfraction  
-      endif
       if (myid==0) write(*,*) 'Snscl(2)',Snscl !correct
       if (myid==0) write(*,*)'tnumpart,',tnumpart
 c     tnumpart = 424643 !Tianze 8/27/15 r25p1new !1036730 
@@ -12129,32 +12195,31 @@ c     end do
       if(myid==1)then
       write(*,*) 'myid=',myid,'pmass=',pmass,'totpmass=',totpmass
       endif
+      !starting particle generation loop
       do while(pmass.ge.0.0)
-      idx=idx+1
-      !generate random (x,y,z) locations
-      xv = ran2(iseed)*(xmax-xmin) + xmin
-      yv = ran2(iseed)*(ymax-ymin) + ymin
-      zv = ran2(iseed)*(zl-2.0*delta_vis) + delta_vis     
-      !Brian 2/20/15 No droplets in viscous region
-      ! draw one particle size
-      ! April 2019, add iszcls selection in create_random_partsize
-      call create_random_partsize(rpnewtmp)
-      ! calculate particle (water) mass
-      mwnewtmp=rhow*4.0/3.0*pi*rpnewtmp**3.0
-      ! create particle with this radius 
-      call create_particle((/xv,yv,zv/),(/0.01,0.0,0.0/),
+       idx=idx+1
+       !generate random (x,y,z) locations
+       xv = ran2(iseed)*(xmax-xmin) + xmin
+       yv = ran2(iseed)*(ymax-ymin) + ymin
+       zv = ran2(iseed)*(zl-2.0*delta_vis) + delta_vis     
+       !Brian 2/20/15 No droplets in viscous region
+       ! draw one particle size
+       ! April 2019, add iszcls selection in create_random_partsize
+       call create_random_partsize(rpnewtmp,indrp)
+       ! calculate particle (water) mass
+       mwnewtmp=rhow*4.0/3.0*pi*rpnewtmp**3.0
+       ! create particle with this radius 
+       call create_particle((/xv,yv,zv/),(/0.01,0.0,0.0/),
      +                   Tbot(1),idx,myid,rpnewtmp) 
-      ! add one more to particle number in this processor
-      numpart=numpart + 1
-      ! calculate remaining mass
-      pmass=pmass-mwnewtmp
-      if(myid==1)then
-      write(*,*) 'myid1,rpnewtmp=',rpnewtmp,',mwnewtmp=',mwnewtmp
-      endif
-      
-      if(myid==1)then
-      write(*,*) 'myid1,pmass=',pmass,'idx=',idx,'numpart=',numpart
-      endif
+       ! add one more to particle number in this processor
+       numpart=numpart + 1
+       ! calculate remaining mass
+       pmass=pmass-mwnewtmp
+       !for debug below
+          if(myid==1 .and. imndbug.ne.0)then
+            write(*,*)'myid1,rpnewtmp=',rpnewtmp,',mwnewtmp=',mwnewtmp
+            write(*,*)'myid1,pmass=',pmass,'idx=',idx,'numpart=',numpart
+          endif
       end do
       ! initialize the particle source term
       partTsrc = 0.0
@@ -12163,49 +12228,25 @@ c     end do
       partHsrc_t = 0.0
       partTEsrc = 0.0
       partTEsrc_t = 0.0
-
+      !calculate particle generated in each class
+      call mpi_reduce(tnumgen(:),sumbuf_tnumgen(:),Nrp,
+     +mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+      !record the initial generated particle number
+      tnumcls=sumbuf_tnumgen
+      !print out the summation results
+      if (myid==0) then
+        do icls=1,Nrp
+                write(*,'(a5,e15.6,a15,f10.2)')
+     +'rp',rpsmp(icls),'tnumgen_tot',sumbuf_tnumgen(icls)
+        end do
+      end if
       ! calculate total particle number
       call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,
-     +       mpi_comm_world,ierr)
+     +mpi_comm_world,ierr)
 
       write(*,*)'myid=',myid,',numpart=',numpart,',tot=',tnumpart
 
       end subroutine particle_init
-
-
-
-      subroutine thermal_and_part_prop
-      use particles
-      use pars
-      implicit none 
-
-c     rhoa = 1.1 !kg/m^3 mixture ** Might want to consider 1.1 (26C, 970hPa) -> mu?   http://www.baranidesign.com/air-density/air-density.htm !Tianze changed rhoa from 1.1 to 1.194 on 8/10/15
-c     rhow = 1000.0 !kg/m^3
-c     part_grav = 0.8027
-c     nuf  = 1.537e-5 !m^2/s  !1.537e-5 !Tianze changed to 1.564e-5
-
-      !Thermal stuff:
-c     Cpa = 1006.0 !http://www.mhtl.uwaterloo.ca/old/onlinetools/airprop/airprop.html
-c     Cpp = 4179.0 !J/kg-K
-c     CpaCpp = Cpa/Cpp
-c     Pra = 0.715 !nuf/2.1145E-5 !0.71
-c     Sc = 0.615 !nuf/0.000024992 !Brian 7/29/14  (@25degC: Dm =0.000025 = 25E-6m2/s)
-c     Mw = 0.018015 !kg/mol !Brian 7/29/14 
-c     Ru = 8.3144621 !m^3*Pa/K/mol !Brian 7/29/14
-c     Ms = 0.05844  !kg/mol
-c     Lv =(25.0 - 0.02274*26.0)*10.0**5 !J/Kg Hardcoding Tianze 11/1/17
-c     Gam = 7.28*10.0**(-2) !N/m
-c     Ion = 2.0
-c     Os = 1.093
-      
-c     delta_vis = 0.000163 !Bounce at viscous length
-c     radius_init = 25.00e-6 !30.9e-6 !m   !Tianze 8/14/15 !40.6e-6
-c     Sal = 34.0 !PSU ~=gNaCl/kgH2O
-
-      end subroutine  thermal_and_part_prop
-
-
-
 
 
       subroutine particle_setup
@@ -12230,16 +12271,18 @@ c     real :: EFFc,EFFs,ep,ef,Lv
      
       !call setup the size of particle class !11/02/2018
       call set_partclass
+      call calc_truc_CDF!Defind Sn,Sntruc,CDF
       !Nrp is now assigned 2/21/2019
       allocate (Fnum_reintro(itape,Nrp),Ftot_reintro(itape,Nrp))
       allocate (Fhis_reintro(itape,Nrp),Ftmp_reintro(itape,Nrp))
-      allocate(szcls(Nrp),tnumcls(Nrp),probsz(Nrp))
+      allocate(tnumgen(Nrp),tnumcls(Nrp),probsz(Nrp))
       !initialize counting time series 2/21/2019
       Fnum_reintro(:,:)=0.0
       Ftmp_reintro(:,:)=0.0
       Ftot_reintro(:,:)=0.0
       Ftmp_reintro(:,:)=0.0
-      tnumcls(:)=0.0
+      tnumcls(:)=0.0 !only the initial value
+      tnumgen(:)=0.0 !all generated
       !allocate here for now, Tianze 2/19/2018
 c     Vpmax = 0.089595 !Tianze 9/11/15
       
@@ -12255,32 +12298,8 @@ c     EFFs = Ion*Os*m_s*Mw/Ms/(Volp*rhop-m_s)
 c     estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)
 c    +                                           +EFFc-EFFs)    
 
-c     ============== SET BOUNDS OF BINS ========== 11/01/17
-c     tL1=0.0
-c     tL2=20.0
-c     dTp1=-1.80
-c     dTp2=0.75
-c     drp1=-2.75e-06
-c     drp2=0.15e-06
-c     dup1=-0.5
-c     dup2=2.0
-c     dvp1=-0.75
-c     dvp2=0.75
-c     dwp1=-0.5
-c     dwp2=0.25
-c     dTfp1=-0.5
-c     dTfp2=1.8
-c     dqfp1=-0.1e-4
-c     dqfp2=2.0e-3
-c     Tp1=300.5
-c     Tp2=301.5
-c     Tf1=300.5
-c     Tf2=301.3
-c     qstr1=0.02
-c     qstr2=0.025
-c     qinf1=0.02
-c     qinf2=0.025
-c     hmax1=0.0
+c     ============== SET BOUNDS OF BINS ========== 11/01/17     hmax1=0.0
+      !all moved to params.f
       hmax2=zl
       
 
@@ -12320,9 +12339,6 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       num_reintro = 0
       tot_reintro = 0
       his_reintro = 0 !Tianze9/11/15 
-      !Fnum_reintro = 0
-      !Ftot_reintro = 0
-      !Fhis_reintro = 0
       !Initialize the linked list of particles:
       nullify(part,first_particle)
 
@@ -13929,7 +13945,7 @@ c    !!! 2-D Histograms
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,ispray,
      +         icouple,iTcouple,iHcouple,ievap,iszcls,iSSGF,ivpran,
-     +         irpsmp,impscl,itriavg,impmnl
+     +         irpsmp,iFnumsmp,impscl,impintv,impmnl
  
         ! 11 grid parameters
         namelist /grid_params/ ncpu_s,Uo,TtopC,TbotC,RHT,RHB,
@@ -13948,8 +13964,9 @@ c    !!! 2-D Histograms
         ! CppCpa is calculated in this file later
         namelist /constants/ radius_init,rhow,nuf,
      +         Cpp,Cpa,Pra,Sc,Mw,Ru,rhoa,Lv,Gam,Ion,Os,
-     +         Sal,Ms,delta_vis,rpmax,rpmin,
-     +         rp1,rp2,rp3,rp4,rp5,rp6,phm1,phm2,phm3,phm4,phm5,phm6
+     +         Sal,Ms,delta_vis,rpmax,rpmin,rp_inc,
+     +         rp1,rp2,rp3,rp4,rp5,rp6,phmt1,phmt2,phmt3,
+     +         phm1,phm2,phm3,phm4,phm5,phm6
         ! 25 params for partical statistics for PDF
         namelist /PDF/tL1,tL2,dTp1,dTp2,drp1,drp2,dup1,dup2,dvp1,dvp2,
      +         dwp1,dwp2,dTfp1,dTfp2,dqfp1,dqfp2,Tp1,Tp2,
@@ -14054,126 +14071,239 @@ c    !!! 2-D Histograms
         end if
         end function
 
-        subroutine calc_truc_CDF(rpmin1,rpmax1)
+
+        !!!! version 2 calculate trucated CDF
+        subroutine calc_truc_CDF
+
         use pars
         use fields
         use con_data
         use particles
         implicit none
-        real,intent(in) :: rpmax1,rpmin1
-        real :: rpmed
-        real,allocatable :: rpinit(:),mpinit(:)
+        real,allocatable :: mpsmp(:)
         !Sn,Snscl,rpcrop,CDF are global variables
-        integer :: irpmax,irpmin,irpmed,irpmono
-        integer :: icntmin,icntmax,icntmed
-        integer :: m,n,i,j,imax,imin
+        integer :: m,n,ii,i,j,imax,imin
         real :: SSGF,SSGF0,SSGF1,SSGF2
-        m=1200 !sample radius size
-        allocate(rpinit(m),mpinit(m))
-        rpinit(1)=0.0
-        rpinit(2:m) = (/((5e-7*i),i=1,m-1)/) !from 0 to m*0.5 um
-        mpinit=4.0/3.0*rhow*rpinit**3*pi
-        allocate(Sn(m))
-        !non-scaled SSGF
-        ! find index for useful range
-        !irpmax=minloc(rpinit,DIM=1,MASK=(rpinit>rpmax1))-1
-        !return the first location that satisfies the mask
-        icntmin=1
-        do while(icntmin.gt.0)
-        if (rpinit(icntmin)>rpmin1) exit
-        icntmin=icntmin+1
-        end do
-        irpmin=icntmin-1
-        !irpmin=maxloc(rpinit,DIM=1,MASK=(rpinit<=rpmin1))
-        !return the last location that does not satisfy the mask
-        icntmax=1
-        do while(icntmax.gt.0)
-        if (rpinit(icntmax+1).gt.rpmin1) exit
-        icntmax=icntmax+1
-        end do
-        irpmax=icntmax
-        ! medium size
-        icntmed=1
-        rpmed=0.5*(rpmax1+rpmin1)
-        do while(icntmed.gt.0)
-        if (rpinit(icntmed).gt.rpmed) exit
-        icntmed=icntmed+1
-        end do
-        irpmed=icntmed-1
-        ! new way to assign SSGF here 4/10/2019
-        ! SIZE CLASS 0: Mono-disperse
-        if (iszcls==0.and.irpmin==irpmax) then
-                irpmono=irpmin
-                Sn=1e-16
-        Sn(irpmono)=1.0 !equivalent to irpmax
-        ! SIZE CLASS 1:Poly-disperse continuous
-        else if (iszcls==1) then
-           !SSGF 0: UNIFORM
-           if (iSSGF==0) Sn=1.0
-           !SSGF 1: A98
-           if (iSSGF==1) then
-             do i=1,m
-             SSGF=SSGF1(rpinit(i),U10)
-             Sn(i)=SSGF
-             end do
-           end if
-           !SSGF 2: Veron 2014
-           if (iSSGF==2) then
-             do i=1,m
-             SSGF=SSGF2(rpinit(i))
-             Sn(i)=SSGF
-             end do
-           end if
-        ! SSGF CLASS 2: Bi-disperse
-        else if (iszcls==2) then
-         do i=1,m
-          SSGF=1e-16
-          Sn(i)=SSGF   
-         end do
-         Sn(irpmin)=1.0
-         Sn(irpmax)=1.0
-        ! Tri-disperse
-        else if(iszcls==3) then
-         do i=1,m
-          SSGF=1e-16
-          Sn(i)=SSGF   
-         end do
-         !size 1
-         Sn(irpmin)=1.0
-         !size 2
-         Sn(irpmed)=1.0
-         !size 3
-         Sn(irpmax)=1.0
+
+        allocate(Sn(Nrp),mpsmp(Nrp))
+        mpsmp=4.0/3.0*rhow*rpsmp**3*pi
+        if (iSSGF==0) then
+           Sn=1.0
+        else if (iSSGF==1) then
+           do ii=1,Nrp
+           SSGF=SSGF1(rpsmp(ii),U10)
+           Sn(ii)=SSGF
+           end do
+        else if (iSSGF==2) then
+           do ii=1,Nrp
+           SSGF=SSGF1(rpsmp(ii))
+           Sn(ii)=SSGF
+           end do
+        end if
+        if (impmnl==1) then
+           if (Nrp==2) Sn=(/phmt1,phmt2/)
+           if (Nrp==3) Sn=(/phmt1,phmt2,phmt3/)
+           if (Nrp==6) Sn=(/phm1,phm2,phm3,phm4,phm5,phm6/) 
         end if
         ! If SSGF is scaled by it's mass
         ! impscl==0 no scale, impscl==1 
-        if(impscl==1) Sn=Sn/mpinit !normalize flux by its mass
+        if(impscl==1) Sn=Sn/mpsmp !normalize flux by its mass
         if (myid==0) write(*,*)'iSSGF,',iSSGF
-        if (myid==0) write(*,*)'rpinit(2),',rpinit(2)
-        if (myid==0) write(*,*)'Sn(2),',Sn(2)
+        if (myid==0) write(*,*)'rpsmp(1),',rpsmp(1)
+        if (myid==0) write(*,*)'rpsmp(Nrp),',rpsmp(Nrp)
+        if (myid==0) write(*,*)'Sn(1),',Sn(1)
+        if (myid==0) write(*,*)'Sn(Nrp),',Sn(Nrp)
         
-        ! now scale the SSGF
-        n=size(Sn(irpmin:irpmax))
+        ! now crop and scale the SSGF
+        n=size(Sn)
         allocate(Snscl(n),rpcrop(n),CDF(n))
-        rpcrop=rpinit(irpmin:irpmax)
-        Snscl=Sn(irpmin:irpmax)/sum(Sn(irpmin:irpmax))
-      if (myid==0) write(*,*)'Sn(imin:imax),',Sn(irpmin:irpmax)
-      if (myid==0) write(*,*)'sumSncrop,',sum(Sn(irpmin:irpmax))
-      if (myid==0) write(*,*) 'Nrp=',Nrp
-      if(imndbug==1.and.myid==0) write(*,*)'Sn,',Sn
-      if(imndbug==1.and.myid==0) write(*,*)'rpinit,',rpinit
-      if(imndbug==1.and.myid==0) write(*,*)'rpmin,',rpmin1
-      if(imndbug==1.and.myid==0) write(*,*)'rpinit(min),',rpinit(irpmin)
-      if(imndbug==1.and.myid==0) write(*,*)'rpmax,',rpmax1
-      if(imndbug==1.and.myid==0) write(*,*)'rpinit(max),',rpinit(irpmax)
-      CDF(1) = Snscl(1)
+        rpcrop=rpsmp
+        Snscl=Sn/sum(Sn)
+        if (myid==0) then
+         write(*,*) 'rpsmp',rpsmp
+         write(*,*)'Sn,',Sn
+         write(*,*)'sumSncrop,',sum(Sn)
+         write(*,*) 'Nrp=',Nrp
+        end if
+        CDF(1) = Snscl(1)
         do j=2,n
-        CDF(j)=CDF(j-1)+Snscl(j) 
+            CDF(j)=CDF(j-1)+Snscl(j) 
         end do
-        end
+        if(myid==0) write(*,*) 'rpcrop',rpcrop
+        if(myid==0) write(*,*) 'CDF for radius',CDF
+        end subroutine
+
+c       subroutine calc_truc_CDF2(rpmin1,rpmax1)
+c       use pars
+c       use fields
+c       use con_data
+c       use particles
+c       implicit none
+c       real,intent(in) :: rpmax1,rpmin1
+c       real,allocatable :: rporig(:),mpinit(:)
+c       !Sn,Snscl,rpcrop,CDF are global variables
+c       integer :: irpmax,irpmin,irpmed,irpmono
+c       integer :: icnt1,icntmin,icntmax,icntmed
+c       integer :: m,n,ii,i,j,imax,imin
+c       real :: SSGF,SSGF0,SSGF1,SSGF2
+c       m=1200 !sample radius size
+c       allocate(rporig(m),mpinit(m))
+c       rporig(1)=0.0
+c       rporig(2:m) = (/((rp_inc*i),i=1,m-1)/) !from 0 to m*0.5 um
+c       mpinit=4.0/3.0*rhow*rporig**3*pi
+c       allocate(Sn(m))
+c       !non-scaled SSGF
+c       ! find index for useful range
+c       !irpmax=minloc(rpinit,DIM=1,MASK=(rpinit>rpmax1))-1
+c       !iszcls=1-3
+c          !return the first location that satisfies the mask
+c          icntmin=1
+c          do while(icntmin.gt.0)
+c          if (rporig(icntmin)>rpmin1) exit
+c          icntmin=icntmin+1
+c          end do
+c          irpmin=icntmin-1
+c          !irpmin=maxloc(rpinit,DIM=1,MASK=(rpinit<=rpmin1))
+c          !return the last location that does not satisfy the mask
+c          icntmax=1
+c          do while(icntmax.gt.0)
+c          if (rporig(icntmax+1).gt.rpmax1) exit
+c          icntmax=icntmax+1
+c          end do
+c          irpmax=icntmax
+c          ! medium size
+c          icntmed=1
+c          do while(icntmed.gt.0)
+c          if (rporig(icntmed).gt.rpmed) exit
+c          icntmed=icntmed+1
+c          end do
+c          irpmed=icntmed-1
+c          
+c       ! more interval sizes (iszcls==4)
+c       if (iszcls==4) then
+c         rpsmp=(/rp1,rp2,rp3,rp4,rp5,rp6/)
+c       else if (iszcls==5) then
+c         rpsmp=szcls
+c       end if
+c       if (iszcls.ge.4) then
+c         do ii=1,Nrp
+c         icnt1=1 
+c         ! size 1
+c          do while(icnt1.gt.0)
+c            if (rporig(icnt1).gt.rpsmp(ii)) exit
+c            icnt1=icnt1+1
+c          end do
+c          irpind(ii)=icnt1-1
+c         end do
+c       end if
+c      !!!!!!!!!!!!!!!!!!111
+c       ! new way to assign SSGF here 4/10/2019
+c       ! SIZE CLASS 0: Mono-disperse
+c       if (iszcls==0.and.irpmin==irpmax) then
+c               irpmono=irpmin
+c               Sn=1e-16
+c       Sn(irpmono)=1.0 !equivalent to irpmax
+c       ! SIZE CLASS 1:Poly-disperse continuous
+c       else if (iszcls==1) then
+c          !SSGF 0: UNIFORM
+c          if (iSSGF==0) Sn=1.0
+c          !SSGF 1: A98
+c          if (iSSGF==1) then
+c            do i=1,m
+c            SSGF=SSGF1(rporig(i),U10)
+c            Sn(i)=SSGF
+c            end do
+c          end if
+c          !SSGF 2: Veron 2014
+c          if (iSSGF==2) then
+c            do i=1,m
+c            SSGF=SSGF2(rporig(i))
+c            Sn(i)=SSGF
+c            end do
+c          end if
+c       ! SSGF CLASS 2: Bi-disperse
+c       else if (iszcls==2) then
+c         do i=1,m
+c          SSGF=1e-16
+c          Sn(i)=SSGF   
+c         end do
+c         Sn(irpmin)=1.0
+c         Sn(irpmax)=1.0
+c       ! Tri-disperse
+c       else if(iszcls==3) then
+c        do i=1,m
+c         SSGF=1e-16
+c         Sn(i)=SSGF   
+c        end do
+c        if(impmnl==0) then
+c         !size 1
+c         Sn(irpmin)=1.0
+c         !size 2
+c         Sn(irpmed)=1.0
+c         !size 3
+c         Sn(irpmax)=1.0
+c        else if (impmnl==1) then
+c         !mannual input
+c         Sn(irpmin)=phmt1
+c         Sn(irpmed)=phmt2
+c         Sn(irpmax)=phmt3
+c        end if
+c       ! Hex-size
+c       else if(iszcls.ge.4) then
+c         if(impmnl==0) then
+c         !uniform
+c           if(iSSGF==0) then
+c             Sn(irpind)=1.0
+c         ! A98 SSGF
+c           else if (iSSGF==1) then
+c             do ii=1,Nrp
+c             Sn(irpind(ii))=SSGF1(rpsmp(ii),U10)
+c             end do
+c         ! Veron SSGF
+c            else if (iSSGF==2) then
+c             do ii=1,Nrp
+c             Sn(irpind(ii))=SSGF2(rpsmp(ii))
+c             end do
+c           end if
+c         end if
+c       end if
+c       ! If SSGF is scaled by it's mass
+c       ! impscl==0 no scale, impscl==1 
+c       if(impscl==1) Sn=Sn/mpinit !normalize flux by its mass
+c       if (myid==0) write(*,*)'iSSGF,',iSSGF
+c       if (myid==0) write(*,*)'rporig(2),',rporig(2)
+c       if (myid==0) write(*,*)'Sn(2),',Sn(2)
+c       
+c       ! now crop and scale the SSGF
+c       n=size(Sn(irpmin:irpmax))
+c       allocate(Snscl(n),rpcrop(n),CDF(n))
+c       rpcrop=rporig(irpmin:irpmax)
+c       Snscl=Sn(irpmin:irpmax)/sum(Sn(irpmin:irpmax))
+c       if (myid==0) then
+c        write(*,*)'Sn(imin:imax),',Sn(irpmin:irpmax)
+c        write(*,*)'sumSncrop,',sum(Sn(irpmin:irpmax))
+c        write(*,*) 'Nrp=',Nrp
+c       end if
+c       if(imndbug.ne.0.and.myid==0)then 
+c         write(*,*)'Sn,',Sn
+c         write(*,*)'rpinit,',rporig
+c         write(*,*)'irpmin,',irpmin
+c         write(*,*)'rpmin,',rpmin1
+c         write(*,*)'rporig(min),',rporig(irpmin)
+c         write(*,*)'irpmax,',irpmax
+c         write(*,*)'rpmax,',rpmax1
+c         write(*,*)'rporig(max),',rporig(irpmax)
+c       end if
+c       CDF(1) = Snscl(1)
+c       do j=2,n
+c           CDF(j)=CDF(j-1)+Snscl(j) 
+c       end do
+c       if(myid==0) write(*,*) 'rpcrop',rpcrop
+c       if(myid==0) write(*,*) 'CDF for radius',CDF
+c       end subroutine
 
 
-        subroutine create_random_partsize(rpran1)
+        subroutine create_random_partsize(rpran1,icnt)
         use pars
         use fields
         use con_data
@@ -14181,38 +14311,26 @@ c    !!! 2-D Histograms
         use particles
         implicit none
         real,intent(out) :: rpran1
-        real :: ran2
-        integer :: icnt
+        real :: ran2,rantmp
+        integer,intent(out) :: icnt
         ! Mono-disperse
         if(iszcls==0) rpran1=radius_init
         ! Polydisperse: continuous
         if (iszcls.ge.1) then
          icnt=1
+         rantmp=ran2(iseed)
          do while(icnt.gt.0)
-         if (CDF(icnt).ge.ran2(iseed)) exit
+         if (CDF(icnt).ge.rantmp) exit
          icnt=icnt+1
          end do
          rpran1=rpcrop(icnt)
         end if
+         if (myid==0.and.imndbug.ne.0)then
+                 write(*,*) 'icnt',icnt,'rpran1',rpran1
+         end if
         !rpran1=rpcrop(minloc(CDF,DIM=1,MASK=(CDF>=ran2(iseed))))
         end subroutine
         
-c       subroutine create_binary_partsize(rp1,rp2,rpbin)
-c       use pars
-c       use fields
-c       use con_data
-c       use con_stats
-c       use particles
-c       real,intent(in):: rp1,rp2
-c       real,intent(out):: rpbin
-c       real::ran2
-c       if (ran2(issed).le.0.5) then
-c       rpbin=rp1
-c       else 
-c       rpbin=rp2
-c       endif
-c       end subroutine
-
         subroutine calc_total_tnumpart(massfrac1,tnumpart1)
         use pars
         use fields
@@ -14414,50 +14532,6 @@ c       if (myid==0) write(*,*) 'format of pstat:', fmtpstat
         end do
         end 
 
-        subroutine regularize_rpinit(rpran1in,rpran1out)
-        use pars
-        use particles
-        use fields
-        use con_data
-        implicit none
-        real,intent(in):: rpran1in
-        real,intent(out) :: rpran1out 
-        real,allocatable :: szcls1(:),szcls2(:),dszcls(:) !index starts from 1
-        integer :: indszcls,icls
-        allocate(szcls1(Nrp),szcls2(Nrp),dszcls(Nrp))
-        if (Nrp==35) then 
-        !lower bounds
-        szcls1=(/19.0E-6,21.0E-6,23.0E-6,25.0E-6,27.0E-6,
-     +        29.0E-6,31.0E-6,33.0E-6,35.0E-6,37.0E-6,
-     +        39.0E-6,41.0E-6,43.0E-6,45.0E-6,47.0E-6,
-     +        49.0E-6,51.0E-6,55.0E-6,59.0E-6,64.0E-6,
-     +        70.0E-6,80.0E-6,90.0E-6,100.0E-6,110.0E-6,
-     +        120.0E-6,130.0E-6,150.0E-6,175.0E-6,200.0E-6,
-     +        230.0E-6,260.0E-6,300.0E-6,350.0E-6,400.0E-6/) 
-        ! upper bounds
-        szcls2=(/21.0E-6,23.0E-6,25.0E-6,27.0E-6,29.0E-6,
-     +        31.0E-6,33.0E-6,35.0E-6,37.0E-6,39.0E-6,
-     +        41.0E-6,43.0E-6,45.0E-6,47.0E-6,49.0E-6,
-     +        51.0E-6,55.0E-6,59.0E-6,64.0E-6,70.0E-6,
-     +        80.0E-6,90.0E-6,100.0E-6,110.0E-6,120.0E-6,
-     +        130.0E-6,150.0E-6,175.0E-6,200.0E-6,230.0E-6,
-     +        260.0E-6,300.0E-6,350.0E-6,400.0E-6,450.0E-6/) 
-
-        szcls=0.5*(szcls1+szcls2) !stored globally 2/18/2019 
-        !indszcls=maxloc(szcls1,DIM=1,MASK=(rpran1in>=szcls1))
-        icls=1
-        do while(icls.gt.0) !This loop reports the smallest value>rp
-        if(rpran1in<=szcls1(icls)) exit        
-        icls=icls+1 
-        enddo
-        indszcls=icls-1
-        rpran1out=0.5*(szcls1(indszcls)+szcls2(indszcls))
-        else if (Nrp==2) then
-        rpran1out=rpran1in
-        szcls=(/rpmin,rpmax/)
-        end if
-        end subroutine
-
         subroutine index_sizecls(rpin,clsrpout)
         use particles
         use pars
@@ -14466,42 +14540,33 @@ c       if (myid==0) write(*,*) 'format of pstat:', fmtpstat
         implicit none 
 
         real,intent(in)::rpin
-        integer::ipcls
+        integer::irpcls
         integer,intent(out)::clsrpout
-        if (Nrp==2) then
-           if(imndbug==1) write(*,*) 'rpmin=',rpmin,'rpmax=',rpmax
-                if (rpin<1.01*rpmin .and. rpin>0.99*rpmin) then
-                   clsrpout=1
-                  if(imndbug==1) write(*,*) 'rpin==rpmin'
-                else if (rpin<1.01*rpmax .and. rpin>0.99*rpmax) then 
-                  clsrpout=2
-                 end if
+        irpcls=1
+        do while(irpcls.gt.0)
+        if (rpsmp(irpcls).ge.rpin) exit
+           irpcls=irpcls+1
+         end do
+ 
+        clsrpout=irpcls
+        if (imndbug.ne.0.and.myid==1) then
+               write(*,*) 'rpin=',rpin,'clsrpout=',clsrpout
         end if
-
-        ipcls=1
-        if (Nrp==35) then
-           if(imndbug==1) write(*,*) 'szcls=',szcls
-           do while (ipcls.gt.0)
-           if (rpin<=szcls(ipcls)) exit
-           ipcls=ipcls+1
-           end do
-           clsrpout=ipcls
-        end if 
-        if (imndbug==1) write(*,*) 'rpin=',rpin,'clsrpout=',clsrpout
         end subroutine
 
 
-        subroutine numreintro_class(rpin)
+        subroutine numreintro_class(rpin,irpcls)
         use particles
         use pars
         use fields
         use con_data
         implicit none
+        real,intent(in)::rpin
+        integer,intent(in)::irpcls
+        integer::ittmp
         ! 1. find size index
         ! call size_class first outside this subroutine 
-        real::rpin
-        integer::irpcls,ittmp
-        call index_sizecls(rpin,irpcls)       
+        ! fed from part%rpind
         ! 2. find time index
         ittmp=mod(it,itape)
         if (ittmp==0) ittmp=itape
@@ -14537,7 +14602,7 @@ c       if (myid==0) write(*,*) 'format of pstat:', fmtpstat
         integer status(mpi_status_size), ierr
         integer,intent(in) :: istep
         real :: sumbuf_Fnum(itape,Nrp)
-        real :: sumbuf_tnumcls(Nrp)
+        real :: sumbuf_tnumgen(Nrp)
         !file 92000
         character*90 path_Fnumtt,path_Fnum
         character cgrid*10, num*3,iblks*16
@@ -14565,29 +14630,28 @@ c       if (itlocal==0) itlocal=itape
 c       call mpi_reduce(hist2D_tdTp(:,:),sumbuf2D_tdTp,(histbins+2)**2,
 c    +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
-        call mpi_reduce(tnumcls(:),sumbuf_tnumcls(:),Nrp,
+        call mpi_reduce(tnumgen(:),sumbuf_tnumgen(:),Nrp,
      +mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
-        if(myid==0) write(*,*) 'sz_Fnum=',size(Fnum_reintro,dim=1)
+        if(myid==0) write(*,*) 'sz_Fnum=',size(Fnum_reintro,dim=2),itape
         call mpi_reduce(Fnum_reintro(:,:),sumbuf_Fnum(:,:),itape*Nrp,
      +mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
         if(myid==0) write(*,*) 'sz_Ftmp=',size(sumbuf_Fnum)
         if(myid==0)write(*,*)'Ftmp@itape=',sumbuf_Fnum(itape,:)
         
-        if (myid==0) write(*,*) 'szcls=',szcls
+        if (myid==0) write(*,*) 'rpsmp=',rpsmp
 
         if(l_root) then !only write from myid==0
         !write table title when reaching the first itape
-        !File 92000: Fnum time series table
-        path_Fnumtt = path_hist(1:iblnk-1)//'/Fnum_clstitle'//
-     +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
-
-        open (unit=92000,file=path_Fnumtt,
-     +  form='formatted',access='sequential')
-           write(92000,fmt2Dtt) 'size',szcls
-           write(92000,fmt2Dtt) 'count',sumbuf_tnumcls
-        close(92000)
- 
+        if (it==itape) then
+          !File 92000: Fnum time series table
+          path_Fnumtt = path_hist(1:iblnk-1)//'/Fnum_clstitle.txt'
+          open (unit=92000,file=path_Fnumtt,
+     +    form='formatted',access='sequential')
+             write(92000,fmt2Dtt) 'size',rpsmp
+             write(92000,fmt2Dtt) 'count',tnumcls
+          close(92000)
+        end if
 
         !File 92001: Fnum time series table
         path_Fnum = path_hist(1:iblnk-1)//'/Fnum'//
@@ -14602,19 +14666,18 @@ c    +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
         end if 
         end subroutine
 
-        subroutine count_tnumcls(rpin)
+        subroutine count_tnumgen(rpin,indrpcls)
         use pars
         use particles
         use fields
         use con_data
         include 'mpif.h'
         real,intent(in)::rpin
-        integer::irpcls
+        integer,intent(in)::indrpcls
         irpcls=1
         ! get size clss
-        call index_sizecls(rpin,irpcls) 
         ! add counts
-        tnumcls(irpcls)=tnumcls(irpcls)+1.0
-        end subroutine count_tnumcls
+        tnumgen(indrpcls)=tnumgen(indrpcls)+1.0
+        end subroutine count_tnumgen
         
         
