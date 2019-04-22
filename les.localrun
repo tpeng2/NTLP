@@ -1,0 +1,34 @@
+#!/bin/bash
+
+#$ -M tpeng2@nd.edu
+#$ -m abe
+#$ -pe mpi-4 4
+#$ -q *@@richter
+#$ -N polytest8
+#$ -j y
+echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
+ulimit -s unlimited
+case=polytest8
+time=0000000
+runout=$case.out.$time
+
+datadir=~/scratch365/tpeng2/NTLP/$case
+homedir=~/Research/NTLP/$case
+
+mkdir $datadir
+
+cd $homedir
+
+#module load mvapich2
+#module load intel
+
+imachine=0
+echo $imachine > ./mach.file
+echo $datadir >> ./mach.file
+I_MPI_SHM_LMT=shm
+
+mpiexec -n 16 $homedir/lesmpi.a $homedir/params.f > $datadir/$runout
+#mpiexec -n 16 $homedir/../build/lesmpi.a $homedir/params.in > $datadir/$runout
+
+
+
