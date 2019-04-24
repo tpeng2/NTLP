@@ -69,14 +69,14 @@ c     ------------ Boundary Conditions moved from con_d for params.in
       real :: u_geo,v_geo !Geostrophic wind balance pressure gradient
 c     ----------------------------------------------------------------------
       integer ::    nnx, nny, nnz, nxy, ncx, nnxp1, nnyp1, ncy,
-     +     nnxp2, nnyp2, nnzp1, ivis, nnzm1, isize, krec,
-     +     izs, ize, ixs, ixe, jxs, jxe, kxs, kxe,
-     +     mxs, mxe, iss, ise, iys, iye, jys, jye
+     +   nnxp2, nnyp2, nnzp1, ivis, nnzm1, isize, krec, plisize, plkrec,
+     +   izs, ize, ixs, ixe, jxs, jxe, kxs, kxe,
+     +   mxs, mxe, iss, ise, iys, iye, jys, jye
 c     ----------------------------------------------------------------------
       character case*3
 c     ----------------------------------------------------------------------
-      integer  ::   nvel, npre, nhis1, nprt,
-     +     nhisp, nvelc, 
+      integer  ::   nvel, npre, nhis1, pnhis1, nprt,
+     +     nhisp, pnhisp, nvelc, 
      +     nviz_z, nviz_y, 
      +     nviz_x, nviz_s,
      +     kfile, jfile, ibcl, ibcu,
@@ -112,10 +112,10 @@ c     ----------------------------------------------------------------------
      +     ucfl, vcfl, wcfl
 c     ----------------------------------------------------------------------
       character*80  path_res, path_sav, path_his, path_prt,
-     +     path_hp, path_sav_hp, path_part,path_ran,
+     +     path_hp, path_sav_hp,path_sav_polyhp, path_part,path_ran,
      +     path_v, path_c, path_p, path_h,
      +     path_sav_v, path_sav_c, 
-     +     path_sav_p, path_sav_h, path_sav_part,
+     +     path_sav_p, path_sav_h,path_sav_polyh, path_sav_part,
      +     path_hist, path_sav_hist,path_pstat,
      +     bad_news
       character case_inp*3
@@ -143,11 +143,11 @@ c     ----------------------------------------------------------------------
       real, allocatable :: partTsrc(:,:,:),partTsrc_t(:,:,:)
       real, allocatable :: partHsrc(:,:,:),partHsrc_t(:,:,:) 
       real, allocatable :: partTEsrc(:,:,:),partTEsrc_t(:,:,:) 
-      real, allocatable :: partcount_t(:,:,:),partsrc_t(:,:,:,:)
-      real, allocatable :: vpsum_t(:,:,:,:),vpsqrsum_t(:,:,:,:)
-      real, allocatable :: upwp_t(:,:,:),upwp(:,:,:)
-      real, allocatable :: partcount(:,:,:),partsrc(:,:,:,:)
-      real, allocatable :: vpsum(:,:,:,:),vpsqrsum(:,:,:,:)
+      real, allocatable :: upwp(:,:,:),upwp_t(:,:,:)
+      real, allocatable :: partcount(:,:,:),partcount_t(:,:,:)
+      real, allocatable :: partsrc(:,:,:,:),partsrc_t(:,:,:,:)
+      real, allocatable :: vpsum(:,:,:,:),vpsum_t(:,:,:,:)
+      real, allocatable :: vpsqrsum(:,:,:,:),vpsqrsum_t(:,:,:,:)
       real, allocatable :: Tpsum(:,:,:),Tpsum_t(:,:,:)
       real, allocatable :: Tpsqrsum(:,:,:),Tpsqrsum_t(:,:,:)
       real, allocatable :: Tfsum(:,:,:),Tfsum_t(:,:,:)
@@ -159,6 +159,10 @@ c     ----------------------------------------------------------------------
       real, allocatable :: mwsum(:,:,:),mwsum_t(:,:,:)
       real, allocatable :: qstarsum(:,:,:),qstarsum_t(:,:,:) 
 
+      ! flux splitting, experiment for 2 sizes
+      real,allocatable :: partcount1(:,:,:),partcount1_t(:,:,:)
+      real,allocatable :: partcount2(:,:,:),partcount2_t(:,:,:)
+      ! counting particle
       integer :: particletype,pad_diff
       integer :: numpart,tnumpart,ngidx
       integer :: num_reintro,tot_reintro,his_reintro !Tianze 9/11/15
@@ -462,7 +466,10 @@ c    + 		 Tpsrc_cls(maxnz,Nrp),!Tianze  10/29/2018 add sizeclass
      +           stokess,stokes(maxnz1)
         real ::  dtg, dslg, dzg
         real ::  phip,phiw,phiv   ! Brian 10/6/14
+        real ::  partcount(maxnz)
 
+        !poly-dispersity profiles
+        real ::  pcount1(maxnz), pcount2(maxnz)
         end type con_s
         type(con_s), target :: c_s
         real, pointer ::
@@ -504,6 +511,8 @@ c    + 		 Tpsrc_cls(maxnz,Nrp),!Tianze  10/29/2018 add sizeclass
      +           dtg, dslg, dzg
         real, pointer ::  
      +           phip,phiw,phiv   ! Brian 10/6/14
+        real, pointer :: 
+     +           pcount1(:), pcount2(:)
       contains
          subroutine fill_cs
 c
@@ -587,6 +596,11 @@ c
              trip => c_s%trip; isize = isize + size(trip)
              TpSq => c_s%TpSq; isize = isize + size(TpSq)
              Tpdqp => c_s%Tpdqp; isize = isize + size(Tpdqp)
+
+             !poly dispersity
+             plisize=0
+             pcount1 => c_s%pcount1; plisize=plisize+size(pcount1)
+             pcount2 => c_s%pcount2; plisize=plisize+size(pcount2)
 
 
              xkn     => c_s%xkn
@@ -1067,7 +1081,9 @@ c -------- WRITE HISTOGRAM =======================
       endif
       if(l_root) then
          if(mhis  .and. istage .eq. 1)  call write_his(itop)
+         if(mhis  .and. istage .eq. 1)  call write_polyhis(itop)
          if(mhis  .and. istage .eq. 1 .and. mtape) call close_his
+         if(mhis  .and. istage .eq. 1 .and. mtape) call close_polyhis
       endif
 c
  8999 continue
@@ -6304,8 +6320,8 @@ c
      +     vyy(nnx,iys:iye,izs:izs)
 
       !Initialize partcount to 0:
-      partcount = 0.0
-      partcount_t = 0.0
+      partcount = 0.0           !poly-disp. below
+      partcount_t = 0.0         !poly-disp. below
       vpsum = 0.0
       vpsum_t = 0.0
       vpsqrsum = 0.0
@@ -6340,6 +6356,13 @@ c
       mwsum_t = 0.0 !Brian 7/30/14
       qstarsum = 0.0
       qstarsum_t = 0.0 
+
+      !poly-dispersity
+      partcount1 = 0.0
+      partcount1_t = 0.0
+      partcount2 = 0.0
+      partcount2_t = 0.0
+ 
 
 c ------------ note set nmatch in sr. iso so that
 c              it is compatible with conditions here
@@ -7449,13 +7472,14 @@ c
       use con_data
       use con_stats
       use particles
-c
 c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
       parameter(js = 34, ns = 5, nstat = js + ns*nscl)   !Brian 7/30/14  js=25->26
+      parameter(pjs=2,nplstat=pjs)
       real stat(1:nnz,nstat)
+      real plstat(1:nnz,nplstat) !partcount1, partcount2, 4/23/2019 test
 c
 c -------- stat(.,1) = u*u = ups
 c          stat(.,2) = v*v = vps
@@ -7496,6 +7520,12 @@ c          stat(.,m2) = resolved scalar flux ut at zw = utle
 c          stat(.,m3) = resolved scalar flux vt at zw = vtle
 c          stat(.,m4) = scalar t*t at zu = tps
 c          stat(.,m5) = scalar t*t*t at zu = tcube
+
+
+c  ----------  for poly-dispersity stats (pnstat)
+c        plstat(.,1) = partcount1
+c        plstat(.,2) = partcount2
+
 c
 c --------- use a trick with mpi reduce over all z to get averages
 c           by setting stat array = 0 for all z on each process
@@ -7505,7 +7535,15 @@ c
          stat(iz,i) = 0.0
       enddo
       enddo
+c  ----------  for poly-dispersity stats (pnstat)
+        !by setting stat array = 0 for all z on each process
 c
+      do i=1,nplstat
+      do iz=1,nnz
+         plstat(iz,i) = 0.0
+      enddo
+      enddo
+
 c -------- indices for scalars
 c
       m1 = js
@@ -7525,6 +7563,7 @@ c
 c
       do iy=iys,iye
       do ix=1,nnx
+         !combined statistics
          stat(iz,1) = stat(iz,1) + (u(ix,iy,iz) - uxym(iz))**2
          stat(iz,2) = stat(iz,2) + (v(ix,iy,iz) - vxym(iz))**2
          stat(iz,3) = stat(iz,3) + (w(ix,iy,iz) - wxym(iz))**2
@@ -7569,6 +7608,9 @@ c
          stat(iz,32) = stat(iz,32) + partHsrc(ix,iy,iz)
          stat(iz,33) = stat(iz,33) + partTEsrc(ix,iy,iz)
          stat(iz,34) = stat(iz,34) + qstarsum(ix,iy,iz)
+         ! poly-dispersity
+         plstat(iz,1)=plstat(iz,1)+partcount1(ix,iy,iz)
+         plstat(iz,2)=plstat(iz,2)+partcount2(ix,iy,iz)
       enddo
       enddo
 c
@@ -8161,6 +8203,7 @@ c
 c
       return
       end
+
       subroutine write_his(iloc)
 c
 c ----- write history file with global parameters
@@ -8181,7 +8224,7 @@ c
       holtop = hol
       wt_min = wtsb(iloc,1)
       wt_le  = wtle(iloc,1)
-      krec = krec + 1
+      krec = krec + 1 !global
       mid = nnz/4
       write(nhis1,6000) time,dt,utau,ziavg,amonin,holtop,
      +         (tsfcc(1)-t_ref),uwsfc,vwsfc,divgmax, wt_min, wt_le,
@@ -8207,6 +8250,9 @@ c
 c
       return
       end
+
+
+ 
       subroutine write_prof(nhisp,krec,num,f)
       real f(num)
       real*4 f32(num)
@@ -8262,6 +8308,112 @@ c -------------------- process write errors
  8100 format(' SR. SAVE_HIS: Trouble profile history file',
      +       ' not in path =',a80)
       end
+
+
+      subroutine write_polyhis(iloc)
+      !write history file for poly-dispersed cases
+c
+c ----- write poly-dispersed particle history file with global parameters
+c       write tsfcc specially to preserve digits!
+c
+      use pars
+      use fields
+      use con_data
+      use con_stats
+      use particles
+c
+      divgmax = 0.0
+      do iz=1,nnz
+         divgmax = amax1(divgmax, divz(iz))
+      enddo
+c
+      ziavg = zi
+      holtop = hol
+      wt_min = wtsb(iloc,1)
+      wt_le  = wtle(iloc,1)
+      plkrec = plkrec + 1 !global
+      mid = nnz/4
+
+      ! what to write for time series
+      write(pnhis1,6070) time,maxval(partcount1(1:nnx,iys:iye,1)),
+     +maxval(partcount2(1:nnx,iys:iye,1)) 
+ 6070 format(3e17.8) 
+      if (myid==0) then
+        write(*,*)'test poly-hist',time,
+     +maxval(partcount1(1:nnx,iys:iye,1)),
+     +maxval(partcount2(1:nnx,iys:iye,1))
+        write(*,*) 'test plkrec',plkrec,'plisize',plisize
+      end if
+c
+c -------------- write profile information
+c
+      call write_polyprof(pnhisp,plkrec,plisize,c_s%pcount1)
+c
+      return
+      end subroutine
+
+      subroutine write_polyprof(pnhisp,plkrec,num,f)
+      real f(num)
+      real*4 f32(num)
+c
+c -------------- build special 32 bit arrays for profiles
+c
+      do i=1,num
+         f32(i) = f(i)
+      enddo
+c
+      write(*,*) 'profile passed to write',f32
+      write(pnhisp,err=979,rec=plkrec) (f32(i),i=1,num)
+      !test
+c
+      return
+c --------------- errors
+  979 continue
+      write(6,9070) num,plkrec
+ 9070 format(' 9070, trouble in ',
+     +       'SR. save_polyprof cannot write profile data ',/,
+     +       ' num = ',i8, 'plkrec = ',i6)
+      stop
+      end subroutine
+
+      subroutine close_polyhis
+c
+c ---- close history files
+c
+      use pars
+      logical there
+c
+c ---- root closes and checks the files
+c
+      close(pnhis1)
+      close(pnhisp)
+      inquire(file=path_sav_polyh,exist=there)
+      if(.not.there) then
+         write(6,8070) path_sav_polyh
+         call mpi_finalize(ierr)
+         stop
+      endif
+      inquire(file=path_sav_polyhp,exist=there)
+      if(.not.there) then
+         write(6,8170) path_sav_polyhp
+         call mpi_finalize(ierr)
+         stop
+      endif
+      write(6,7070) path_sav_polyh
+      write(6,7170) path_sav_polyhp
+c
+      return
+c -------------------- process write error7070 format(' HISTORY DATA IS WRITTEN IN FILE  ',a80)
+ 7070 format(' POLY-HIST DATA IS WRITTEN IN FILE  ',a80)
+ 7170 format(' POLY PROFILE HISTORY DATA IS WRITTEN IN FILE  ',a80)
+ 8070 format(' SR. SAVE_POLYHIS: Trouble history file not in path ='
+     +       ,a80)
+ 8170 format(' SR. SAVE_POLYHIS: Trouble profile history file',
+     +       ' not in path =',a80)
+      end subroutine
+
+
+
       subroutine dealias
 c
 c --------- wave cutoff filter using 2d fft
@@ -8498,8 +8650,8 @@ c     +         Text(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3))
       end if
       !Keep track of particle counts at each node (its surrounding volume)
       !NOTE: allocate even if ispray == 0, since it's in xy_stats
-      allocate(partcount(nnx,iys:iye,izs-1:ize+1))
-      allocate(partcount_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(partcount(nnx,iys:iye,izs-1:ize+1))   !poly-disp. below
+      allocate(partcount_t(0:nnz+1,iys:iye,mxs:mxe)) !poly-disp. below
       allocate(upwp_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(upwp(nnx,iys:iye,izs-1:ize+1))
       allocate(vpsum(nnx,iys:iye,izs-1:ize+1,1:3))
@@ -8535,6 +8687,12 @@ c     +         Text(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3))
       allocate(qstarsum(nnx,iys:iye,izs-1:ize+1)) 
       allocate(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe)) 
 
+      ! poly-dispersity
+      
+      allocate(partcount1(nnx,iys:iye,izs-1:ize+1))
+      allocate(partcount1_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(partcount2(nnx,iys:iye,izs-1:ize+1))
+      allocate(partcount2_t(0:nnz+1,iys:iye,mxs:mxe))
 
 c ------------- allocate space for boundary condition arrays
 c               on top and bottom of domain
@@ -9409,6 +9567,10 @@ c
       nviz_y = 82
       nviz_x = 84
       nviz_s = 90 
+
+      !poly-dispersity
+      pnhis1=47
+      pnhisp=67
 c
 c ------------- unit number for standard print out
 c               for each mpi task
@@ -9452,7 +9614,8 @@ c
      +                 cgrid(1:4)//case(1:3)//num(1:3)
 c
       return
-      end
+      end subroutine
+
       subroutine open_his(istep)
 c
 c ------------------- open history files by root
@@ -9474,11 +9637,16 @@ c
       call blnk(path_sav_h)
       path_sav_h = path_his(1:iblnk-1)//'/his'//
      +         cgrid(1:4)//case(1:3)//'.'//iblks(1:15)
-c
+      !for poly-dispersity
+      call blnk(path_sav_polyh)
+      path_sav_polyh = path_his(1:iblnk-1)//'/plhis'//
+     +         cgrid(1:4)//case(1:3)//'.'//iblks(1:15)
+cc
 c --------------- build character strings for ieee profile history file
 c                 set record counter for direct access file = 0
 c
       krec = 0
+      plkrec=0
       cgrid = '.le.'
       call blnk(iblks)
       write(iblks(1:7),'(i7.7)') istep
@@ -9488,7 +9656,11 @@ c
       call blnk(path_sav_hp)
       path_sav_hp = path_his(1:iblnk-1)//'/his'//
      +         cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.ieee'
-c
+      !for poly-dispersity
+      call blnk(path_sav_polyhp)
+      path_sav_polyhp = path_his(1:iblnk-1)//'/plhis'//
+     +         cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.ieee'
+cc
 c ----------------- save data in directory
 c
       if(l_root) then
@@ -9500,6 +9672,15 @@ c
       open(nhisp,err=4000,file=path_sav_hp,
      +        form='unformatted',access='direct',recl=isize*j_recl,
      +        status='unknown')
+      !for poly-dispersity
+      close(pnhis1)
+      open(pnhis1,err=3070,file=path_sav_polyh,form='formatted')
+c
+      close(pnhisp)
+      open(pnhisp,err=4070,file=path_sav_polyhp,
+     +        form='unformatted',access='direct',recl=plisize*j_recl,
+     +        status='unknown')
+ 
       endif
 c
       return
@@ -9507,17 +9688,32 @@ c ------------------- process errors
  3000 continue
       write(6,6301) nhis1, path_sav_h
  6301 format(' 6301, SR. OPEN_HIS:',/,
-     +       '    cannot open history1 file on unit = ',i2,/,
-     +       '    path = ',a80)
+     +       '   cannot open history1 file on unit = ',i2,/,
+     +       '   path = ',a80)
       stop
 c-------------------
  4000 continue
       write(6,6302) nhisp, path_sav_hp
  6302 format(' 6302, SR. OPEN_HIS:',/,
-     +       '    cannot open history profile file on unit = ',i2,/,
-     +       '    path = ',a80)
+     +       '   cannot open history profile file on unit = ',i2,/,
+     +       '   path = ',a80)
       stop
-      end
+c -------------------poly-dispsersity: process errors
+ 3070 continue
+      write(6,6371) pnhis1, path_sav_polyh
+ 6371 format(' 6371, SR. OPEN_HIS:',/,
+     +       '   cannot open poly-history1 file on unit = ',i2,/,
+     +       '   path = ',a80)
+      stop
+c-------------------
+ 4070 continue
+      write(6,6372) pnhisp, path_sav_polyhp
+ 6372 format(' 6372, SR. OPEN_HIS:',/,
+     +       '   cannot open poly-history profile file on unit = ',i2,/,
+     +       '   path = ',a80)
+      stop
+      end subroutine
+
       subroutine viz_output_filename(istep)
 c
 c ------------------- set visualization files,
@@ -10432,7 +10628,7 @@ c
       !call mpi_barrier(mpi_comm_world,ierr)
       !if (myid==5) write(*,*) 'time fill_ext:',t_f-t_s
 
-      partcount_t = 0.0
+      partcount_t = 0.0   !poly-disp. below
       vpsum_t = 0.0
       upwp_t = 0.0
       vpsqrsum_t = 0.0
@@ -10451,6 +10647,7 @@ c
       myphiv_sum = 0.0
       qstarsum_t = 0.0 
 
+
       mytpnb = 0      !Tianze 7/29/15
       mytpnt = 0      !Tianze 7/29/15
       mytpnm = 0      !Tianze 7/29/15
@@ -10458,6 +10655,10 @@ c
       mydmb = 0.0     !Tianze 7/29/15
       mydmm = 0.0     !Tianze 7/29/15
       mydmt = 0.0     !Tianze 7/29/15
+
+      ! poly-dispersity related
+      partcount1_t=0.0
+      partcount2_t=0.0
 
       !t_s = mpi_wtime()
 
@@ -10473,16 +10674,16 @@ c         pcount = 0
          !First, interpolate to get the fluid velocity part%uf(1:3):
          call uf_interp     
 
-	 if (isnan(part%Tf) .and. (myid==0)) then
-	 write(*,*) 'PART TF INTERP ERROR',part%Tf
-	 write(*,*) 'check type particles',part%pidx,part%procidx !add real-time szcls, initial known
+         if (isnan(part%Tf) .and. (myid==0)) then
+         write(*,*) 'PART TF INTERP ERROR',part%Tf
+         write(*,*) 'check type particles',part%pidx,part%procidx !add real-time szcls, initial known
          write(*,*) 'particle xp,vp,uf',part%xp,part%vp,part%uf
-	 write(*,*) 'xrhs,vrhs,vp_init',part%xrhs,part%vrhs,part%vp_init
+         write(*,*) 'xrhs,vrhs,vp_init',part%xrhs,part%vrhs,part%vp_init
          write(*,*) 'Tp,Tprhs_s,_l,Tf',part%Tp,part%Tprhs_s,part%Tprhs_L
-	 write(*,*) 'rp,radrhs,qf',part%radius,part%radrhs,part%qinf
+         write(*,*) 'rp,radrhs,qf',part%radius,part%radrhs,part%qinf
          write(*,*) 'qp,tinit,zpmax,rpinit',part%qstar,part%t_init
-	 write(*,*) 'zpmax,rpinit',part%zp_max,part%rp_init
-	 end if
+         write(*,*) 'zpmax,rpinit',part%zp_max,part%rp_init
+         end if
 
          if (it1 .LE. 1 ) then 
             !part%xrhs(1:3) = part%vp(1:3)
@@ -10705,8 +10906,8 @@ c         pcount = 0
       call ztox_trans(partcount_t(0:nnz+1,iys:iye,mxs:mxe),
      +                partcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-
+     +                ncpu_s,numprocs) !poly-disp. below
+        
       call ztox_trans(radsum_t(0:nnz+1,iys:iye,mxs:mxe),
      +                radsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
@@ -10731,6 +10932,20 @@ c         pcount = 0
      +                qstarsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
+
+
+
+      ! for poly-dispersity
+      call ztox_trans(partcount1_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                partcount1(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+      call ztox_trans(partcount2_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                partcount2(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
 
       end if
 
@@ -12159,33 +12374,15 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       deltaz = zmax-zmin
       if (myid==0) write(*,*) 'Snscl(2)',Snscl !correct
       if (myid==0) write(*,*)'tnumpart,',tnumpart
-c     tnumpart = 424643 !Tianze 8/27/15 r25p1new !1036730 
-      !tnumpart = 2248907
-      !tnumpart = 150016
-      !tnumpart = 66350
-c     numpart = tnumpart/numprocs
-c     if (myid == 0) then
-c     numpart = numpart + MOD(tnumpart,numprocs)
-c     endif
-
       !Initialize the linked list of particles:
-c     nullify(part,first_particle)
       
       !Now initialize all particles with a random location on that processor
       maxx=0.0
       maxy=0.0
       maxz=0.0
-      !Method 1 (for constant number assgined first)
-c     do idx=1,numpart
-c     xv = ran2(iseed)*(xmax-xmin) + xmin
-c     yv = ran2(iseed)*(ymax-ymin) + ymin
-c     zv = ran2(iseed)*(zl-2.0*delta_vis) + delta_vis     !Brian 2/20/15 No droplets in viscous region
-c     call create_particle((/xv,yv,zv/),(/0.01,0.0,0.0/),
-c    +                   Tbot(1),idx,myid,radius_init)  !Tianze 8/13/15 !Brian 7/29/14 Currently ignoring Tp and qinfp
-c     end do
-
-      ! April 2019, to have a constant water mass
-      ! Method 2, assign mass to each core, and then 
+      !Method 1 (for constant number assgined first)--- OUTDATED!
+      ! April 2019, change to have a constant water mass
+      !Method 2, assign mass to each core, and then 
       ! set numpart = 0
       numpart = 0
       idx=0
@@ -12720,6 +12917,7 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       if (myid==0) write(*,*) 'total number of particles read:',totalp
 
       end subroutine read_part_res
+
       subroutine particle_stats(ipt,jpt,kpt)
       use particles
       use pars
@@ -12738,7 +12936,15 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       !and computes quantities needed to get particle statistics
 
       partcount_t(kpt,jpt,ipt) = partcount_t(kpt,jpt,ipt) + 1.0
-      
+
+      ! splitting partcount
+
+      if (part%rpind==1) then
+        partcount1_t(kpt,jpt,ipt) = partcount1_t(kpt,jpt,ipt) + 1.0
+      else if (part%rpind==2) then
+        partcount2_t(kpt,jpt,ipt) = partcount2_t(kpt,jpt,ipt) + 1.0
+      end if 
+
       !Get su mean, mean-squared of particle velocities at each level
       upwp_t(kpt,jpt,ipt) = upwp_t(kpt,jpt,ipt) + part%vp(1)*part%vp(3)
       do i = 1,3
@@ -14626,9 +14832,6 @@ c       if (itlocal==0) itlocal=itape
         iblks(8:8) = '_'
         write(iblks(9:15),'(i7.7)') (istep+itape)
         call blnk(path_sav_hist)
-       !reduce Fnum to Ftmp
-c       call mpi_reduce(hist2D_tdTp(:,:),sumbuf2D_tdTp,(histbins+2)**2,
-c    +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
         call mpi_reduce(tnumgen(:),sumbuf_tnumgen(:),Nrp,
      +mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
