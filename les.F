@@ -7491,7 +7491,7 @@ c          stat(.,7) = sgs e at zu = engsbz
 c          stat(.,8) = sgs e at zw = eavg
 c          stat(.,9) = resolved uw at zw = uwle
 c          stat(.,10) = resolved vw at zw = vwle
-c          stat(.,11) = particle number in each cell 
+c          stat(.,11) = partcount ! particle number in each cell 
 c          stat(.,12) = vpsum(1) 
 c          stat(.,13) = vpsum(2) 
 c          stat(.,14) = vpsum(3) 
@@ -7522,7 +7522,7 @@ c          stat(.,m4) = scalar t*t at zu = tps
 c          stat(.,m5) = scalar t*t*t at zu = tcube
 
 
-c  ----------  for poly-dispersity stats (pnstat)
+c  ----------  for poly-dispersity stats (plstat)
 c        plstat(.,1) = partcount1
 c        plstat(.,2) = partcount2
 
@@ -7613,6 +7613,9 @@ c
          plstat(iz,2)=plstat(iz,2)+partcount2(ix,iy,iz)
       enddo
       enddo
+      if(mod(it,ihst)==0.and.imndbug.ne.0) then
+              write(*,*) 'partcount,stat(11,:)',stat(:,11)
+      end if
 c
 c ------------ get scalar resolved fluxes and variances
 c
@@ -7722,6 +7725,10 @@ c
       Hpsrc(iz) = stat(iz,32)*fnxy
       TEpsrc(iz) = stat(iz,33)*fnxy
       qstarm(iz) = stat(iz,34)*fnxy
+
+      !poly-dispersity
+      pcount1(iz)=plstat(iz,1)
+      pcount2(iz)=plstat(iz,2) 
 
 c
 c ------------ get scalar resolved fluxes and variances
@@ -8253,7 +8260,10 @@ c
 
 
  
-      subroutine write_prof(nhisp,krec,num,f)
+      subroutine write_prof(nhisp1,krec1,num,f)
+      implicit none
+      integer,intent(in) :: num,nhisp1,krec1
+      integer :: i
       real f(num)
       real*4 f32(num)
 c
@@ -8263,12 +8273,12 @@ c
          f32(i) = f(i)
       enddo
 c
-      write(nhisp,err=999,rec=krec) (f32(i),i=1,num)
+      write(nhisp1,err=999,rec=krec1) (f32(i),i=1,num)
 c
       return
 c --------------- errors
   999 continue
-      write(6,9000) num,krec
+      write(6,9000) num,krec1
  9000 format(' 9000, trouble in ',
      +       'SR. save_prof cannot write profile data ',/,
      +       ' num = ',i8, 'krec = ',i6)
@@ -8339,7 +8349,7 @@ c
      +maxval(partcount2(1:nnx,iys:iye,1)) 
  6070 format(3e17.8) 
       if (myid==0) then
-        write(*,*)'test poly-hist',time,
+        write(*,*)'iloc',iloc,'test poly-hist',time,
      +maxval(partcount1(1:nnx,iys:iye,1)),
      +maxval(partcount2(1:nnx,iys:iye,1))
         write(*,*) 'test plkrec',plkrec,'plisize',plisize
@@ -8352,7 +8362,11 @@ c
       return
       end subroutine
 
-      subroutine write_polyprof(pnhisp,plkrec,num,f)
+      subroutine write_polyprof(plhispid,plkrec1,num,f)
+      implicit none
+      integer,intent(in) :: plhispid,plkrec1
+      integer,intent(in) :: num
+      integer :: i
       real f(num)
       real*4 f32(num)
 c
@@ -8362,14 +8376,14 @@ c
          f32(i) = f(i)
       enddo
 c
-      write(*,*) 'profile passed to write',f32
-      write(pnhisp,err=979,rec=plkrec) (f32(i),i=1,num)
+      write(*,*) 'plhispid',plhispid,'profile passed to write',f32 !test
+      write(plhispid,err=979,rec=plkrec1) (f32(i),i=1,num)
       !test
 c
       return
 c --------------- errors
   979 continue
-      write(6,9070) num,plkrec
+      write(6,9070) num,plkrec1
  9070 format(' 9070, trouble in ',
      +       'SR. save_polyprof cannot write profile data ',/,
      +       ' num = ',i8, 'plkrec = ',i6)
@@ -10949,7 +10963,14 @@ c         pcount = 0
 
       end if
 
-
+      !test
+      if(myid==0.and.istage==3) then
+         write(*,*) 'it,mxs,mxe,iys,iye',it,mxs,mxe,iys,iye
+         write(*,*) 'it',it,'partcount1(2,2,iz)',partcount1(2,2,:)
+         write(*,*) 'it',it,'partcount2(2,2,iz)',partcount2(2,2,:)
+         write(*,*) 'it',it,'sum(partcount1)',sum(partcount1)
+         write(*,*) 'it',it,'sum(partcount2)',sum(partcount2)
+      end if
       !t_s = mpi_wtime
       !Get particle count:
       numpart = 0
@@ -12937,10 +12958,21 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
 
       partcount_t(kpt,jpt,ipt) = partcount_t(kpt,jpt,ipt) + 1.0
 
+      !testing
+      if(myid==0.and.part%rpind==1.and.mod(it,ihst)==0) then
+       write(*,*) 'it',it,'detect sz1 @cpu0 pid',part%pidx,part%radius
+      end if
+      if(myid==0.and.part%rpind==2.and.mod(it,ihst)==0) then
+       write(*,*) 'it',it,'detect sz2 @cpu0 pid',part%pidx,part%radius
+      end if
       ! splitting partcount
 
       if (part%rpind==1) then
         partcount1_t(kpt,jpt,ipt) = partcount1_t(kpt,jpt,ipt) + 1.0
+        !test
+        if (myid==0.and.mod(it,ihst)==0) then
+        write(*,*) 'it',it,'sum(partcount1_t)@cpu0',sum(partcount1_t)
+        end if
       else if (part%rpind==2) then
         partcount2_t(kpt,jpt,ipt) = partcount2_t(kpt,jpt,ipt) + 1.0
       end if 
