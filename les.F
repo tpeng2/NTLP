@@ -10965,11 +10965,20 @@ c         pcount = 0
 
       !test
       if(myid==0.and.istage==3) then
-         write(*,*) 'it,mxs,mxe,iys,iye',it,mxs,mxe,iys,iye
-         write(*,*) 'it',it,'partcount1(2,2,iz)',partcount1(2,2,:)
-         write(*,*) 'it',it,'partcount2(2,2,iz)',partcount2(2,2,:)
-         write(*,*) 'it',it,'sum(partcount1)',sum(partcount1)
-         write(*,*) 'it',it,'sum(partcount2)',sum(partcount2)
+         write(*,*) 'it',it,'cpu0 sum(partcount)',sum(partcount)
+         write(*,*) 'it',it,'cpu0 sum(partcount_t)',sum(partcount_t)
+         write(*,*) 'it',it,'cpu0 sum(partcount1)',sum(partcount1)
+         write(*,*) 'it',it,'cpu0 sum(partcount1_t)',sum(partcount1_t)
+         write(*,*) 'it',it,'cpu0 sum(partcount2)',sum(partcount2)
+         write(*,*) 'it',it,'cpu0 sum(partcount2_t)',sum(partcount2_t)
+      end if
+      if(myid==1.and.istage==3) then
+         write(*,*) 'it',it,'cpu1 sum(partcount)',sum(partcount)
+         write(*,*) 'it',it,'cpu1 sum(partcount_t)',sum(partcount_t)
+         write(*,*) 'it',it,'cpu1 sum(partcount1)',sum(partcount1)
+         write(*,*) 'it',it,'cpu1 sum(partcount1_t)',sum(partcount1_t)
+         write(*,*) 'it',it,'cpu1 sum(partcount2)',sum(partcount2)
+         write(*,*) 'it',it,'cpu1 sum(partcount2_t)',sum(partcount2_t)
       end if
       !t_s = mpi_wtime
       !Get particle count:
@@ -12959,18 +12968,20 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       partcount_t(kpt,jpt,ipt) = partcount_t(kpt,jpt,ipt) + 1.0
 
       !testing
+      if(imndbug.ne.0) then
       if(myid==0.and.part%rpind==1.and.mod(it,ihst)==0) then
        write(*,*) 'it',it,'detect sz1 @cpu0 pid',part%pidx,part%radius
       end if
       if(myid==0.and.part%rpind==2.and.mod(it,ihst)==0) then
        write(*,*) 'it',it,'detect sz2 @cpu0 pid',part%pidx,part%radius
       end if
+      end if
       ! splitting partcount
 
       if (part%rpind==1) then
         partcount1_t(kpt,jpt,ipt) = partcount1_t(kpt,jpt,ipt) + 1.0
         !test
-        if (myid==0.and.mod(it,ihst)==0) then
+        if (myid==0.and.mod(it,ihst)==0.and.imndbug.ne.0) then
         write(*,*) 'it',it,'sum(partcount1_t)@cpu0',sum(partcount1_t)
         end if
       else if (part%rpind==2) then
