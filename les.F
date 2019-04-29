@@ -140,11 +140,11 @@ c     ----------------------------------------------------------------------
       real, allocatable :: u_t(:,:,:), v_t(:,:,:), w_t(:,:,:)
       real, allocatable :: Text(:,:,:),T_t(:,:,:)
       real, allocatable :: T2ext(:,:,:),T2_t(:,:,:)
-      real, allocatable :: partTsrc(:,:,:),partTsrc_t(:,:,:)
+      real, allocatable :: partTsrc(:,:,:),partTsrc_t(:,:,:) !split
       real, allocatable :: partHsrc(:,:,:),partHsrc_t(:,:,:) 
       real, allocatable :: partTEsrc(:,:,:),partTEsrc_t(:,:,:) 
       real, allocatable :: upwp(:,:,:),upwp_t(:,:,:)
-      real, allocatable :: partcount(:,:,:),partcount_t(:,:,:)
+      real, allocatable :: partcount(:,:,:),partcount_t(:,:,:) !split
       real, allocatable :: partsrc(:,:,:,:),partsrc_t(:,:,:,:)
       real, allocatable :: vpsum(:,:,:,:),vpsum_t(:,:,:,:)
       real, allocatable :: vpsqrsum(:,:,:,:),vpsqrsum_t(:,:,:,:)
@@ -159,9 +159,17 @@ c     ----------------------------------------------------------------------
       real, allocatable :: mwsum(:,:,:),mwsum_t(:,:,:)
       real, allocatable :: qstarsum(:,:,:),qstarsum_t(:,:,:) 
 
-      ! flux splitting, experiment for 2 sizes
+      ! poly-dispersity, flux splitting, experiment for 2 sizes
       real,allocatable :: partcount1(:,:,:),partcount1_t(:,:,:)
       real,allocatable :: partcount2(:,:,:),partcount2_t(:,:,:)
+      real,allocatable :: partsrc1(:,:,:),partsrc1_t(:,:,:)
+      real,allocatable :: partsrc2(:,:,:),partsrc2_t(:,:,:)
+      real,allocatable :: partTsrc1(:,:,:),partTsrc1_t(:,:,:)
+      real,allocatable :: partTsrc2(:,:,:),partTsrc2_t(:,:,:)
+      real,allocatable :: partHsrc1(:,:,:),partHsrc1_t(:,:,:)
+      real,allocatable :: partHsrc2(:,:,:),partHsrc2_t(:,:,:)
+      real,allocatable :: partTEsrc1(:,:,:),partTEsrc1_t(:,:,:)
+      real,allocatable :: partTEsrc2(:,:,:),partTEsrc2_t(:,:,:)
       ! counting particle
       integer :: particletype,pad_diff
       integer :: numpart,tnumpart,ngidx
@@ -468,10 +476,9 @@ c    + 		 Tpsrc_cls(maxnz,Nrp),!Tianze  10/29/2018 add sizeclass
         real ::  phip,phiw,phiv   ! Brian 10/6/14
         real ::  partcount(maxnz)
 
-        !poly-dispersity profiles
-        real ::  pcount1(maxnz), pcount2(maxnz)
-        end type con_s
-        type(con_s), target :: c_s
+       end type con_s
+       !================
+       type(con_s), target :: c_s
         real, pointer ::
      +           wwsb(:), engz(:), engsbz(:),
      +           englez(:), uxym(:), vxym(:), wxym(:),
@@ -511,10 +518,32 @@ c    + 		 Tpsrc_cls(maxnz,Nrp),!Tianze  10/29/2018 add sizeclass
      +           dtg, dslg, dzg
         real, pointer ::  
      +           phip,phiw,phiv   ! Brian 10/6/14
-        real, pointer :: 
-     +           pcount1(:), pcount2(:)
+       
+       !=========================
+        !poly-dispersity profiles
+       type polycon_s
+        sequence
+c       real ::  pcount(maxnz,Nrp),
+c    +           pm1src(maxnz,Nrp),pm2src(maxnz,Nrp),pm3src(maxnz,Nrp),
+c    +           pTpsrc(maxnz,Nrp),
+c    +           pHpsrc(maxnz,Nrp),
+c    +           pTEpsrc(maxnz,Nrp)
+        real,allocatable ::  pcount(:,:),
+     +           pm1src(:,:),pm2src(:,:),pm3src(:,:),
+     +           pTpsrc(:,:),
+     +           pHpsrc(:,:),
+     +           pTEpsrc(:,:)
+        end type polycon_s
+       !=========================
+        type(polycon_s), target:: plc_s !add an alias
+        real,pointer ::  pcount(:,:),
+     +           pm1src(:,:),pm2src(:,:),pm3src(:,:),
+     +           pTpsrc(:,:),pHpsrc(:,:),pTEpsrc(:,:)
+        !=======
       contains
          subroutine fill_cs
+            use pars
+            use particles
 c
 c -------------- pointer association for stat arrays and get size
 c                of stat arrays isize for history files
@@ -597,12 +626,6 @@ c
              TpSq => c_s%TpSq; isize = isize + size(TpSq)
              Tpdqp => c_s%Tpdqp; isize = isize + size(Tpdqp)
 
-             !poly dispersity
-             plisize=0
-             pcount1 => c_s%pcount1; plisize=plisize+size(pcount1)
-             pcount2 => c_s%pcount2; plisize=plisize+size(pcount2)
-
-
              xkn     => c_s%xkn
              ykn     => c_s%ykn
              xk      => c_s%xk
@@ -625,6 +648,29 @@ c
              phip    => c_s%phip   ! Brian 10/6/14
              phiw    => c_s%phiw 
              phiv    => c_s%phiv
+             
+
+        allocate(plc_s%pcount(maxnz,Nrp))
+        allocate(plc_s%pm1src(maxnz,Nrp))
+        allocate(plc_s%pm2src(maxnz,Nrp))
+        allocate(plc_s%pm3src(maxnz,Nrp))
+        allocate(plc_s%pTpsrc(maxnz,Nrp))
+        allocate(plc_s%pHPsrc(maxnz,Nrp))
+        allocate(plc_s%pTEpsrc(maxnz,Nrp))
+             !Poly-dispersed type
+             plisize=0
+             pcount  => plc_s%pcount;  plisize=plisize+size(pcount)
+             pm1src  => plc_s%pm1src;  plisize=plisize+size(pm1src)
+             pm2src  => plc_s%pm2src;  plisize=plisize+size(pm2src)
+             pm3src  => plc_s%pm3src;  plisize=plisize+size(pm3src)
+             pTpsrc  => plc_s%pTpsrc;  plisize=plisize+size(pTpsrc)
+             pHpsrc  => plc_s%pHpsrc;  plisize=plisize+size(pHpsrc)
+             pTEpsrc => plc_s%pTEpsrc; plisize=plisize+size(pTEpsrc)
+        if(myid==0) write(*,*) 'size(pcount)',size(pcount)
+        if(myid==0) write(*,*) 'pcount',pcount
+        if(myid==0) write(*,*) 'Nrp',Nrp
+        if(myid==0) write(*,*) 'size(plc_s%pcount)',size(plc_s%pcount)
+        if(myid==0) write(*,*) 'plc_s%pcount',plc_s%pcount
          return
          end subroutine fill_cs
       end module con_stats
@@ -717,6 +763,8 @@ c     itn      = 49
       case_inp = 'cou'
 c
       call get_units
+      !call setup the size of particle class !11/02/2018
+      call set_partclass
       call gridd
       call setcon
       call set_paths
@@ -6363,7 +6411,10 @@ c
       partcount2 = 0.0
       partcount2_t = 0.0
  
-
+      partTsrc1 = 0.0
+      partTsrc1_t = 0.0
+      partTsrc2 = 0.0
+      partTsrc2_t = 0.0
 c ------------ note set nmatch in sr. iso so that
 c              it is compatible with conditions here
 c
@@ -7472,14 +7523,28 @@ c
       use con_data
       use con_stats
       use particles
+      implicit none
 c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      parameter(js = 34, ns = 5, nstat = js + ns*nscl)   !Brian 7/30/14  js=25->26
-      parameter(pjs=2,nplstat=pjs)
-      real stat(1:nnz,nstat)
-      real plstat(1:nnz,nplstat) !partcount1, partcount2, 4/23/2019 test
+c     parameter(js = 34, ns = 5, nstat = js + ns*nscl)   !Brian 7/30/14  js=25->26
+c     parameter(pjs=5,nplstat=pjs*35) !pjs=how many quantities,
+      integer:: js,ns,nstat,pjs,pns,nplstat !xy-stat dimensions
+      integer:: m1,m2,m3,m4,m5 !xy-stat extended dimensions
+      integer:: ix,iy,iz,i,sgn,izp1,izp2,izm1,l,icls,iclsg  !iteraters
+      real :: rlim !for "function rlim"
+c     real stat(1:nnz,nstat)
+      real,allocatable::stat(:,:)
+c     real plstat(1:nnz,pjs*nplstat) !partcount1, partcount2, 4/23/2019 test
+      real,allocatable::plstat(:,:) !partcount1, partcount2, 4/23/2019 test
+      js=34
+      ns=5
+      nstat=js+ns*nscl
+      pjs=7
+      nplstat=pjs*Nrp
+      if(myid==0) write(*,*) 'size plstat=',nnz,'x',nplstat
+      allocate(stat(nnz,nstat),plstat(nnz,nplstat))
 c
 c -------- stat(.,1) = u*u = ups
 c          stat(.,2) = v*v = vps
@@ -7523,8 +7588,14 @@ c          stat(.,m5) = scalar t*t*t at zu = tcube
 
 
 c  ----------  for poly-dispersity stats (plstat)
-c        plstat(.,1) = partcount1
-c        plstat(.,2) = partcount2
+       !find Nrp group first (icls=1,Nrp, iclsg=(icls-1)*pjs)
+       !for example, icls=1, iclsg=0, then ipjs=iclsg+1,...+pjs, 1=>pjs
+       !icls=2, iclsg=1*js,then ipjs=iclsg+1,+2,+...,+pjs,pjs+==>2*pjs
+       !..., iclsg=(icls-1)*js, then ..., (icls-1)+1==>icls*pjs
+       !icls=Nrp,
+
+c        plstat(.,(icls-1)+1) = partcount1,partcount2,
+c        plstat(.,(icls-1)+2) = partTsrc1,partTsrc2
 
 c
 c --------- use a trick with mpi reduce over all z to get averages
@@ -7609,8 +7680,26 @@ c
          stat(iz,33) = stat(iz,33) + partTEsrc(ix,iy,iz)
          stat(iz,34) = stat(iz,34) + qstarsum(ix,iy,iz)
          ! poly-dispersity
-         plstat(iz,1)=plstat(iz,1)+partcount1(ix,iy,iz)
-         plstat(iz,2)=plstat(iz,2)+partcount2(ix,iy,iz)
+         do icls=1,Nrp
+         iclsg=(icls-1)*pjs
+         if(icls==1) then
+         plstat(iz,iclsg+1)=plstat(iz,iclsg+1)+partcount1(ix,iy,iz)
+c        plstat(iz,iclsg+2)=plstat(iz,iclsg+2)+partsrc1(ix,iy,iz)
+c        plstat(iz,iclsg+3)=plstat(iz,iclsg+3)+partsrc1(ix,iy,iz)
+c        plstat(iz,iclsg+4)=plstat(iz,iclsg+4)+partsrc1(ix,iy,iz)
+         plstat(iz,iclsg+5)=plstat(iz,iclsg+5)+partTsrc1(ix,iy,iz)
+c        plstat(iz,iclsg+6)=plstat(iz,iclsg+6)+partHsrc1(ix,iy,iz)
+c        plstat(iz,iclsg+7)=plstat(iz,iclsg+7)+partTEsrc1(ix,iy,iz)
+         else if (icls==2) then
+         plstat(iz,iclsg+1)=plstat(iz,iclsg+1)+partcount2(ix,iy,iz)
+c        plstat(iz,iclsg+2)=plstat(iz,iclsg+2)+partsrc2(ix,iy,iz)
+c        plstat(iz,iclsg+3)=plstat(iz,iclsg+3)+partsrc2(ix,iy,iz)
+c        plstat(iz,iclsg+4)=plstat(iz,iclsg+4)+partsrc2(ix,iy,iz)
+         plstat(iz,iclsg+5)=plstat(iz,iclsg+5)+partTsrc2(ix,iy,iz)
+c        plstat(iz,iclsg+6)=plstat(iz,iclsg+6)+partHsrc2(ix,iy,iz)
+c        plstat(iz,iclsg+7)=plstat(iz,iclsg+7)+partTEsrc2(ix,iy,iz)
+         end if
+         end do
       enddo
       enddo
       if(mod(it,ihst)==0.and.imndbug.ne.0) then
@@ -7727,8 +7816,16 @@ c
       qstarm(iz) = stat(iz,34)*fnxy
 
       !poly-dispersity
-      pcount1(iz)=plstat(iz,1)
-      pcount2(iz)=plstat(iz,2) 
+      do icls=1,Nrp
+      iclsg=(icls-1)*pjs
+      pcount(iz,icls)=plstat(iz,iclsg+1)
+      pm1src(iz,icls) =plstat(iz,iclsg+2)
+      pm2src(iz,icls) =plstat(iz,iclsg+3)
+      pm3src(iz,icls) =plstat(iz,iclsg+4)
+      pTpsrc(iz,icls)=plstat(iz,iclsg+5)
+      pHpsrc(iz,icls)=plstat(iz,iclsg+6)
+      pTEpsrc(iz,icls)=plstat(iz,iclsg+7)
+      end do
 
 c
 c ------------ get scalar resolved fluxes and variances
@@ -8357,7 +8454,7 @@ c
 c
 c -------------- write profile information
 c
-      call write_polyprof(pnhisp,plkrec,plisize,c_s%pcount1)
+      call write_polyprof(pnhisp,plkrec,plisize,plc_s%pcount)
 c
       return
       end subroutine
@@ -8559,6 +8656,7 @@ c ------------- establish association between pointers
 c               and data structures
 c
       call fill_cc
+      if(myid==0) write(*,*) 'Nrp=',Nrp
       call fill_cs
 c
       write(6,5001) isize
@@ -8666,8 +8764,8 @@ c     +         Text(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3))
       !NOTE: allocate even if ispray == 0, since it's in xy_stats
       allocate(partcount(nnx,iys:iye,izs-1:ize+1))   !poly-disp. below
       allocate(partcount_t(0:nnz+1,iys:iye,mxs:mxe)) !poly-disp. below
-      allocate(upwp_t(0:nnz+1,iys:iye,mxs:mxe))
-      allocate(upwp(nnx,iys:iye,izs-1:ize+1))
+      allocate(upwp_t(0:nnz+1,iys:iye,mxs:mxe)) !part
+      allocate(upwp(nnx,iys:iye,izs-1:ize+1))   !whole
       allocate(vpsum(nnx,iys:iye,izs-1:ize+1,1:3))
       allocate(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
       allocate(vpsqrsum(nnx,iys:iye,izs-1:ize+1,1:3))
@@ -8684,8 +8782,8 @@ c     +         Text(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3))
       allocate(wpTpsum_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(partsrc(nnx,iys:iye,izs-1:ize+1,1:3))
       allocate(partsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1,1:3))
-      allocate(partTsrc(nnx,iys:iye,izs-1:ize+1))
-      allocate(partTsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1))
+      allocate(partTsrc(nnx,iys:iye,izs-1:ize+1))        !split below
+      allocate(partTsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1))  !split below
       allocate(radsum(nnx,iys:iye,izs-1:ize+1))
       allocate(radsum_t(0:nnz+1,iys:iye,mxs:mxe)) 
       allocate(rad2sum(nnx,iys:iye,izs-1:ize+1)) 
@@ -8708,6 +8806,10 @@ c     +         Text(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3))
       allocate(partcount2(nnx,iys:iye,izs-1:ize+1))
       allocate(partcount2_t(0:nnz+1,iys:iye,mxs:mxe))
 
+      allocate(partTsrc1(nnx,iys:iye,izs-1:ize+1))
+      allocate(partTsrc2(nnx,iys:iye,izs-1:ize+1))
+      allocate(partTsrc1_t(0:nnz+1,iys:iye+1,mxs:mxe+1))
+      allocate(partTsrc2_t(0:nnz+1,iys:iye+1,mxs:mxe+1))
 c ------------- allocate space for boundary condition arrays
 c               on top and bottom of domain
 c
@@ -10851,7 +10953,7 @@ c         pcount = 0
       call ztox_trans(partTsrc_t(0:nnz+1,iys:iye,mxs:mxe),
      +                partTsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +                ncpu_s,numprocs) !split
       call ztox_trans(partHsrc_t(0:nnz+1,iys:iye,mxs:mxe),
      +                partHsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
@@ -10960,7 +11062,15 @@ c         pcount = 0
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
 
+      call ztox_trans(partTsrc1_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                partTsrc1(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
 
+      call ztox_trans(partTsrc2_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                partTsrc2(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
       end if
 
       !test
@@ -12449,12 +12559,17 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
           endif
       end do
       ! initialize the particle source term
-      partTsrc = 0.0
-      partTsrc_t = 0.0
+      partTsrc = 0.0 !split
+      partTsrc_t = 0.0 !split
       partHsrc = 0.0
       partHsrc_t = 0.0
       partTEsrc = 0.0
       partTEsrc_t = 0.0
+      !poly-disp. split
+      partTsrc1 = 0.0
+      partTsrc1_t = 0.0
+      partTsrc2 = 0.0
+      partTsrc2_t = 0.0
       !calculate particle generated in each class
       call mpi_reduce(tnumgen(:),sumbuf_tnumgen(:),Nrp,
      +mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
@@ -12497,7 +12612,7 @@ c     real :: EFFc,EFFs,ep,ef,Lv
       call set_bounds
      
       !call setup the size of particle class !11/02/2018
-      call set_partclass
+      !call set_partclass
       call calc_truc_CDF!Defind Sn,Sntruc,CDF
       !Nrp is now assigned 2/21/2019
       allocate (Fnum_reintro(itape,Nrp),Ftot_reintro(itape,Nrp))
@@ -13021,6 +13136,7 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
 
 
       end subroutine particle_stats
+
       subroutine particle_coupling_update
       use particles
       use pars
@@ -13033,18 +13149,29 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       real :: xv,yv,zv
       real :: ctbuf_s(nnz+2,1:iye-iys+2,6),cbbuf_r(nnz+2,1:iye-iys+2,6)
       real :: crbuf_s(nnz+2,1:mxe-mxs+1,6),clbuf_r(nnz+2,1:mxe-mxs+1,6)
-      integer :: i,j,k,ncount,ipt,jpt,kpt,kwpt
+      integer :: i,j,k,ncount,plncount,ipt,jpt,kpt,kwpt
       integer :: istatus(mpi_status_size),ierr
       integer :: ix,iy,iz
+      integer :: ibufg,icls
       real :: g(3)
       real :: lref,Cvv,Cva,Cpv
+      !poly-dispersity split
+
+      real :: plctbuf_s(nnz+2,1:iye-iys+2,6*Nrp)
+      real :: plcbbuf_r(nnz+2,1:iye-iys+2,6*Nrp)
+      real :: plcrbuf_s(nnz+2,1:mxe-mxs+1,6*Nrp)
+      real :: plclbuf_r(nnz+2,1:mxe-mxs+1,6*Nrp)
 
       g(1:3) = (/0.0, 0.0, part_grav/)
 
       partsrc_t = 0.0
-      partTsrc_t = 0.0
+      partTsrc_t = 0.0 !split
       partHsrc_t = 0.0
       partTEsrc_t = 0.0
+
+      !poly-disperse split
+      partTsrc1_t=0.0
+      partTsrc2_t=0.0
 
       part => first_particle
       do while (associated(part))
@@ -13117,7 +13244,6 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
 
       !Recall to subtract minus g (add g) since momentum is extracted form
       !fluid only through drag term - NOT the gravity term as well
-      ! if (icouple == 1) then
       !drag momentum coupling
       partsrc_t(iz,iy,ix,1:3) =
      +     partsrc_t(iz,iy,ix,1:3) +
@@ -13128,20 +13254,28 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
      +     partsrc_t(iz,iy,ix,1:3) +
      +     rhow/rhoa*pi2*2*part%radius**2*
      +     part%radrhs*part%vp(1:3)*wtt/dV
-c    !  endif
 
-      ! if (iTcouple == 1) then
       partTsrc_t(iz,iy,ix) =
      +     partTsrc_t(iz,iy,ix) +
      +     (part%Tprhs_s*6.0*rhow/rhop/CpaCpp/taup_i*
      +     (pi2/2.0)*part%radius*nuf)*wtt/dV
-c    !  endif
 
-      ! if (iHcouple == 1) then
       partHsrc_t(iz,iy,ix) =     !Brian 8/5/14
      +     partHsrc_t(iz,iy,ix) +  !minus comes later
      +     rhow/rhoa*pi2*2*part%radius**2*part%radrhs*wtt/dV
 
+        ! poly-disp. split
+      if (part%rpind.eq.1) then
+      partTsrc1_t(iz,iy,ix) =
+     +     partTsrc1_t(iz,iy,ix) +
+     +     (part%Tprhs_s*6.0*rhow/rhop/CpaCpp/taup_i*
+     +     (pi2/2.0)*part%radius*nuf)*wtt/dV
+      else if (part%rpind.eq.2) then
+      partTsrc2_t(iz,iy,ix) =
+     +     partTsrc2_t(iz,iy,ix) +
+     +     (part%Tprhs_s*6.0*rhow/rhop/CpaCpp/taup_i*
+     +     (pi2/2.0)*part%radius*nuf)*wtt/dV
+      end if
 
 
 !      http://eesc.columbia.edu/courses/ees/climate/SI_Units.pdf
@@ -13172,12 +13306,14 @@ c    !  endif
       crbuf_s=0.0;ctbuf_s=0.0
       clbuf_r=0.0;cbbuf_r=0.0
     
+      plcrbuf_s=0.0;plctbuf_s=0.0
+      plclbuf_r=0.0;plcbbuf_r=0.0
       !First send top: 
       !get send buffer ready:
       ctbuf_s(1:nnz+2,1:iye-iys+2,1:3)=partsrc_t(0:nnz+1,
      +                                iys:iye+1,mxe+1,1:3)
       ctbuf_s(1:nnz+2,1:iye-iys+2,4)=partTsrc_t(0:nnz+1,
-     +                                iys:iye+1,mxe+1)
+     +                                iys:iye+1,mxe+1)  !split
 
       ctbuf_s(1:nnz+2,1:iye-iys+2,5)=partHsrc_t(0:nnz+1,
      +                                iys:iye+1,mxe+1)
@@ -13188,6 +13324,24 @@ c    !  endif
       ncount = 6*(nnz+2)*(iye-iys+2) 
       call mpi_sendrecv(ctbuf_s,ncount,mpi_real8,tproc,1,
      +     cbbuf_r,ncount,mpi_real8,bproc,1,mpi_comm_world,istatus,ierr)
+      ! poly-dispersity
+      do icls=1,Nrp
+      ibufg=(icls-1)*1 !group for same size starting with 0
+      !ibufg=0
+      !1:3,4,5,6
+      !ibufg=1*Nrp*6, e.g. 1*2*6=
+
+      if (icls==1) then
+      plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+1)=
+     +        partTsrc1_t(0:nnz+1,iys:iye+1,mxe+1)
+      else if (icls==2) then
+      plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+1)=
+     +        partTsrc2_t(0:nnz+1,iys:iye+1,mxe+1)
+      end if 
+      end do
+      plncount=1*Nrp*(nnz+2)*(iye-iys+2)
+      call mpi_sendrecv(plctbuf_s,plncount,mpi_real8,tproc,1,
+     +  plcbbuf_r,ncount,mpi_real8,bproc,1,mpi_comm_world,istatus,ierr)
 
       !Now just add the contents of the receive buffer into the entire 
       !iys column of this proc:
@@ -13223,21 +13377,68 @@ c    !  endif
       ncount = 6*(nnz+2)*(mxe-mxs+1)
       call mpi_sendrecv(crbuf_s,ncount,mpi_real8,rproc,2,
      +     clbuf_r,ncount,mpi_real8,lproc,2,mpi_comm_world,istatus,ierr)
+      !poly-disp. for plcrbuf
+      do icls=1,Nrp
+      ibufg=(icls-1)*1 !group for same size starting with 0
+      !ibufg=0
+      !1:3,4,5,6
+      !ibufg=1*Nrp*6, e.g. 1*2*6=
+
+      if (icls==1) then
+
+      plcrbuf_s(1:nnz+2,1:mxe-mxs+1,ibufg+1)=
+     +        partTsrc1_t(0:nnz+1,iye+1,mxs:mxe)
+      else if (icls==2) then
+      plcrbuf_s(1:nnz+2,1:mxe-mxs+1,ibufg+1)=
+     +        partTsrc2_t(0:nnz+1,iye+1,mxs:mxe)
+      end if 
+
+      end do
+
+      !Now send to right:
+      plncount = 1*Nrp*(nnz+2)*(mxe-mxs+1)
+      call mpi_sendrecv(plcrbuf_s,plncount,mpi_real8,rproc,2,
+     +   plclbuf_r,ncount,mpi_real8,lproc,2,mpi_comm_world,istatus,ierr)
 
       !And again add the contents to the top/bottom rows of partsrc:
       partsrc_t(0:nnz+1,iys,mxs:mxe,1:3) = 
      +           partsrc_t(0:nnz+1,iys,mxs:mxe,1:3) + 
      +                clbuf_r(1:nnz+2,1:mxe-mxs+1,1:3)
-
       partTsrc_t(0:nnz+1,iys,mxs:mxe) = 
      +           partTsrc_t(0:nnz+1,iys,mxs:mxe) + 
-     +                 clbuf_r(1:nnz+2,1:mxe-mxs+1,4)
+     +                 clbuf_r(1:nnz+2,1:mxe-mxs+1,4)   !split
       partHsrc_t(0:nnz+1,iys,mxs:mxe) = 
      +           partHsrc_t(0:nnz+1,iys,mxs:mxe) + 
      +                 clbuf_r(1:nnz+2,1:mxe-mxs+1,5)  
       partTEsrc_t(0:nnz+1,iys,mxs:mxe) = 
      +           partTEsrc_t(0:nnz+1,iys,mxs:mxe) + 
      +                 clbuf_r(1:nnz+2,1:mxe-mxs+1,6)  
+
+      !split for poly-dispersity
+      partTsrc1_t(0:nnz+1,iys,mxs:mxe) = 
+     +           partTsrc1_t(0:nnz+1,iys,mxs:mxe) + 
+     +                 plclbuf_r(1:nnz+2,1:mxe-mxs+1,4)   !split
+      partTsrc2_t(0:nnz+1,iys,mxs:mxe) = 
+     +           partTsrc2_t(0:nnz+1,iys,mxs:mxe) + 
+     +                 plclbuf_r(1:nnz+2,1:mxe-mxs+1,4)   !split
+       do icls=1,Nrp
+      ibufg=(icls-1)*1 !group for same size starting with 0
+      !ibufg=0
+      !1:3,4,5,6
+      !ibufg=1*Nrp*6, e.g. 1*2*6=
+
+      if (icls==1) then
+      partTsrc1_t(0:nnz+1,iys,mxs:mxe) = 
+     +           partTsrc1_t(0:nnz+1,iys,mxs:mxe) + 
+     +                 plclbuf_r(1:nnz+2,1:mxe-mxs+1,ibufg+1)   !split  
+      else if (icls==2) then
+      partTsrc2_t(0:nnz+1,iys,mxs:mxe) = 
+     +           partTsrc2_t(0:nnz+1,iys,mxs:mxe) + 
+     +                 plclbuf_r(1:nnz+2,1:mxe-mxs+1,ibufg+1)   !split
+      end if 
+
+      end do
+
 
       !Now everyone should have the proper summed contributions from particles
       !lying within (i-1,i+1),(j-1,j+1),(k-1,k+1)
