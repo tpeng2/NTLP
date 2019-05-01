@@ -1136,10 +1136,10 @@ c -------- WRITE HISTOGRAM =======================
           if(l_root) call print(6,it,1,nnz)
       endif
       if(l_root) then
-         if(mhis  .and. istage .eq. 1)  call write_his(itop)
-         if(mhis  .and. istage .eq. 1)  call write_polyhis(itop)
-         if(mhis  .and. istage .eq. 1 .and. mtape) call close_his
-         if(mhis  .and. istage .eq. 1 .and. mtape) call close_polyhis
+         if(mhis.and.istage==1)  call write_his(itop)
+         if(mhis.and.istage==1.and.Nrp<=35)  call write_polyhis(itop)
+         if(mhis.and.istage==1.and.mtape) call close_his
+         if(mhis.and.istage==1.and.mtape.and.Nrp<=35) call close_polyhis
       endif
 c
  8999 continue
@@ -11089,6 +11089,7 @@ c         pcount = 0
 
       if(myid==0) write(*,*)'before transfering particle stats'
       ! for poly-dispersity !itterate on icls
+      if (Nrp<=35) then
       do icls=1,Nrp
       call ztox_trans(partcountply_t(0:nnz+1,iys:iye,mxs:mxe,icls),
      +       partcountply(1:nnx,iys:iye,izs-1:ize+1,icls),nnx,nnz,mxs,
@@ -11119,6 +11120,7 @@ c         pcount = 0
      +       mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +       ncpu_s,numprocs)
       end do  
+      end if
       if(myid==0) write(*,*)'after transfering particle stats'
 c     call ztox_trans(partcountply_t(0:nnz+1,iys:iye,mxs:mxe),
 c    +                partcountply(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
@@ -13417,6 +13419,7 @@ c    +     (pi2/2.0)*part%radius*nuf)*wtt/dV
     
       plcrbuf_s=0.0;plctbuf_s=0.0
       plclbuf_r=0.0;plcbbuf_r=0.0
+      !STEP 1-1
       !First send top: 
       !get send buffer ready:
       ctbuf_s(1:nnz+2,1:iye-iys+2,1:3)=partsrc_t(0:nnz+1,
@@ -13429,13 +13432,65 @@ c    +     (pi2/2.0)*part%radius*nuf)*wtt/dV
 
       ctbuf_s(1:nnz+2,1:iye-iys+2,6)=partTEsrc_t(0:nnz+1,
      +                                iys:iye+1,mxe+1)
-
+      !STEP 1-2
       ncount = 6*(nnz+2)*(iye-iys+2) 
-      if(myid==0) write(*,*)'before sending top to bottom'
       call mpi_sendrecv(ctbuf_s,ncount,mpi_real8,tproc,1,
      +     cbbuf_r,ncount,mpi_real8,bproc,1,mpi_comm_world,istatus,ierr)
+      !STEP 1-3
+      !Now just add the contents of the receive buffer into the entire 
+      !iys column of this proc:
+
+      partsrc_t(0:nnz+1,iys:iye+1,mxs,1:3) = 
+     +   partsrc_t(0:nnz+1,iys:iye+1,mxs,1:3) + 
+     +    cbbuf_r(1:nnz+2,1:iye-iys+2,1:3)
+      partTsrc_t(0:nnz+1,iys:iye+1,mxs) = 
+     +   partTsrc_t(0:nnz+1,iys:iye+1,mxs) + 
+     +     cbbuf_r(1:nnz+2,1:iye-iys+2,4)
+
+      partHsrc_t(0:nnz+1,iys:iye+1,mxs) = 
+     +   partHsrc_t(0:nnz+1,iys:iye+1,mxs) + 
+     +     cbbuf_r(1:nnz+2,1:iye-iys+2,5)
+      
+      partTEsrc_t(0:nnz+1,iys:iye+1,mxs) = 
+     +   partTEsrc_t(0:nnz+1,iys:iye+1,mxs) + 
+     +   cbbuf_r(1:nnz+2,1:iye-iys+2,6)
+      !STEP 2-1
+      !Now get the right send buffer ready:
+      crbuf_s(1:nnz+2,1:mxe-mxs+1,1:3)=
+     +        partsrc_t(0:nnz+1,iye+1,mxs:mxe,1:3)
+      crbuf_s(1:nnz+2,1:mxe-mxs+1,4)=
+     +        partTsrc_t(0:nnz+1,iye+1,mxs:mxe)
+      crbuf_s(1:nnz+2,1:mxe-mxs+1,5)=
+     +        partHsrc_t(0:nnz+1,iye+1,mxs:mxe)
+
+      crbuf_s(1:nnz+2,1:mxe-mxs+1,6)=
+     +        partTEsrc_t(0:nnz+1,iye+1,mxs:mxe)
+      !STEP 2-2
+      !Now send to right:
+      ncount = 6*(nnz+2)*(mxe-mxs+1)
+      call mpi_sendrecv(crbuf_s,ncount,mpi_real8,rproc,2,
+     +     clbuf_r,ncount,mpi_real8,lproc,2,mpi_comm_world,istatus,ierr)
+      !STEP 2-3
+      !And again add the contents to the top/bottom rows of partsrc:
+      partsrc_t(0:nnz+1,iys,mxs:mxe,1:3) = 
+     +           partsrc_t(0:nnz+1,iys,mxs:mxe,1:3) + 
+     +                clbuf_r(1:nnz+2,1:mxe-mxs+1,1:3)
+      partTsrc_t(0:nnz+1,iys,mxs:mxe) = 
+     +           partTsrc_t(0:nnz+1,iys,mxs:mxe) + 
+     +                 clbuf_r(1:nnz+2,1:mxe-mxs+1,4)   !split
+      partHsrc_t(0:nnz+1,iys,mxs:mxe) = 
+     +           partHsrc_t(0:nnz+1,iys,mxs:mxe) + 
+     +                 clbuf_r(1:nnz+2,1:mxe-mxs+1,5)  
+      partTEsrc_t(0:nnz+1,iys,mxs:mxe) = 
+     +           partTEsrc_t(0:nnz+1,iys,mxs:mxe) + 
+     +                 clbuf_r(1:nnz+2,1:mxe-mxs+1,6)  
+
+      !====-=-=-===--=--=-=-===-=-=-=-==-=-=-=-=-=-=-=-
+      if (Nrp<=35) then
       ! poly-dispersity
-      if(myid==0) write(*,*)'after sending top to bottom'
+      ! STEP 1b-1
+      !     !First send top: 
+      !get send buffer ready:
       do icls=1,Nrp
       ibufg=(icls-1)*6 !group for same size starting with 0
       !icls=1,ibufg=0*6=0, ==> ibufg+1=1,2,3,4,5,6
@@ -13459,46 +13514,40 @@ c    +     (pi2/2.0)*part%radius*nuf)*wtt/dV
       plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+6)=
      +        partTEsrcply_t(0:nnz+1,iys:iye+1,mxe+1,icls)
       end do
+      !STEP 1b-2
       plncount=6*Nrp*(nnz+2)*(iye-iys+2)
-      if(myid==0) write(*,*)'before pl sending top to bottom'
       call mpi_sendrecv(plctbuf_s,plncount,mpi_real8,tproc,1,
      + plcbbuf_r,plncount,mpi_real8,bproc,1,mpi_comm_world,istatus,ierr)
+      !STEP 1b-3
+  
+       do icls=1,Nrp
+       ibufg=(icls-1)*6
+       partsrc1ply_t(0:nnz+1,iys:iye+1,mxs,icls) = 
+     +   partsrc1ply_t(0:nnz+1,iys:iye+1,mxs,icls) + 
+     +   plcbbuf_r(1:nnz+2,1:iye-iys+2,ibufg+1)
 
-      if(myid==0) write(*,*)'after pl sending top to bottom'
-      !Now just add the contents of the receive buffer into the entire 
-      !iys column of this proc:
+       partsrc2ply_t(0:nnz+1,iys:iye+1,mxs,icls) = 
+     +   partsrc2ply_t(0:nnz+1,iys:iye+1,mxs,icls) + 
+     +   plcbbuf_r(1:nnz+2,1:iye-iys+2,ibufg+2)
 
-      partsrc_t(0:nnz+1,iys:iye+1,mxs,1:3) = 
-     +   partsrc_t(0:nnz+1,iys:iye+1,mxs,1:3) + 
-     +    cbbuf_r(1:nnz+2,1:iye-iys+2,1:3)
-      partTsrc_t(0:nnz+1,iys:iye+1,mxs) = 
-     +   partTsrc_t(0:nnz+1,iys:iye+1,mxs) + 
-     +     cbbuf_r(1:nnz+2,1:iye-iys+2,4)
+       partsrc3ply_t(0:nnz+1,iys:iye+1,mxs,icls) = 
+     +   partsrc3ply_t(0:nnz+1,iys:iye+1,mxs,icls) + 
+     +   plcbbuf_r(1:nnz+2,1:iye-iys+2,ibufg+3)
 
-      partHsrc_t(0:nnz+1,iys:iye+1,mxs) = 
-     +   partHsrc_t(0:nnz+1,iys:iye+1,mxs) + 
-     +     cbbuf_r(1:nnz+2,1:iye-iys+2,5)
-      
-      partTEsrc_t(0:nnz+1,iys:iye+1,mxs) = 
-     +   partTEsrc_t(0:nnz+1,iys:iye+1,mxs) + 
-     +   cbbuf_r(1:nnz+2,1:iye-iys+2,6)
-      
-      !Now get the right send buffer ready:
-      crbuf_s(1:nnz+2,1:mxe-mxs+1,1:3)=
-     +        partsrc_t(0:nnz+1,iye+1,mxs:mxe,1:3)
-      crbuf_s(1:nnz+2,1:mxe-mxs+1,4)=
-     +        partTsrc_t(0:nnz+1,iye+1,mxs:mxe)
-      crbuf_s(1:nnz+2,1:mxe-mxs+1,5)=
-     +        partHsrc_t(0:nnz+1,iye+1,mxs:mxe)
+       partTsrcply_t(0:nnz+1,iys:iye+1,mxs,icls) = 
+     +   partTsrcply_t(0:nnz+1,iys:iye+1,mxs,icls) + 
+     +   plcbbuf_r(1:nnz+2,1:iye-iys+2,ibufg+4)
 
-      crbuf_s(1:nnz+2,1:mxe-mxs+1,6)=
-     +        partTEsrc_t(0:nnz+1,iye+1,mxs:mxe)
+       partHsrcply_t(0:nnz+1,iys:iye+1,mxs,icls) = 
+     +   partHsrcply_t(0:nnz+1,iys:iye+1,mxs,icls) + 
+     +   plcbbuf_r(1:nnz+2,1:iye-iys+2,ibufg+5)
 
-      !Now send to right:
-      ncount = 6*(nnz+2)*(mxe-mxs+1)
-      call mpi_sendrecv(crbuf_s,ncount,mpi_real8,rproc,2,
-     +     clbuf_r,ncount,mpi_real8,lproc,2,mpi_comm_world,istatus,ierr)
-      !poly-disp. for plcrbuf
+       partTEsrcply_t(0:nnz+1,iys:iye+1,mxs,icls) = 
+     +   partTEsrcply_t(0:nnz+1,iys:iye+1,mxs,icls) + 
+     +   plcbbuf_r(1:nnz+2,1:iye-iys+2,ibufg+6)
+       end do
+      !STEP 2b-1
+       !poly-disp. for plcrbuf
       do icls=1,Nrp
       ibufg=(icls-1)*6 !group for same size starting with 0
       !icls=1,ibufg=0*6=0, ==> ibufg+1=1,2,3,4,5,6
@@ -13523,25 +13572,14 @@ c    +     (pi2/2.0)*part%radius*nuf)*wtt/dV
      +        partTEsrcply_t(0:nnz+1,iye+1,mxs:mxe,icls)
       end do
 
+      !STEP 2b-2
       !Now send to right:
       plncount = 6*Nrp*(nnz+2)*(mxe-mxs+1)
       call mpi_sendrecv(plcrbuf_s,plncount,mpi_real8,rproc,2,
      + plclbuf_r,plncount,mpi_real8,lproc,2,mpi_comm_world,istatus,ierr)
 
+      !STEP 2b-3
       !And again add the contents to the top/bottom rows of partsrc:
-      partsrc_t(0:nnz+1,iys,mxs:mxe,1:3) = 
-     +           partsrc_t(0:nnz+1,iys,mxs:mxe,1:3) + 
-     +                clbuf_r(1:nnz+2,1:mxe-mxs+1,1:3)
-      partTsrc_t(0:nnz+1,iys,mxs:mxe) = 
-     +           partTsrc_t(0:nnz+1,iys,mxs:mxe) + 
-     +                 clbuf_r(1:nnz+2,1:mxe-mxs+1,4)   !split
-      partHsrc_t(0:nnz+1,iys,mxs:mxe) = 
-     +           partHsrc_t(0:nnz+1,iys,mxs:mxe) + 
-     +                 clbuf_r(1:nnz+2,1:mxe-mxs+1,5)  
-      partTEsrc_t(0:nnz+1,iys,mxs:mxe) = 
-     +           partTEsrc_t(0:nnz+1,iys,mxs:mxe) + 
-     +                 clbuf_r(1:nnz+2,1:mxe-mxs+1,6)  
-
       !split for poly-dispersity
       do icls=1,Nrp
       ibufg=(icls-1)*6 !group for same size starting with 0
@@ -13573,7 +13611,8 @@ c    +     (pi2/2.0)*part%radius*nuf)*wtt/dV
      +           plclbuf_r(1:nnz+2,1:mxe-mxs+1,ibufg+6)   !split  
 
       end do
-
+      end if
+      !====-=-=-====-=-==--=-=-=-=-=-=-=- END POLY-DISP
 
       !Now everyone should have the proper summed contributions from particles
       !lying within (i-1,i+1),(j-1,j+1),(k-1,k+1)
