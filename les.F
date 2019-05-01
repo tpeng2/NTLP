@@ -135,6 +135,9 @@ c     ----------------------------------------------------------------------
       integer :: rproc,trproc,tproc,tlproc,lproc,blproc,bproc,brproc
       integer :: pr_r,pl_r,pt_r,pb_r,ptr_r,ptl_r,pbl_r,pbr_r
       integer :: pr_s,pl_s,pt_s,pb_s,ptr_s,ptl_s,pbl_s,pbr_s
+      integer :: ncpvar !how many variables as a coupling source term
+      integer :: plncpvar !how many variables as a coupling source term
+      integer :: plnsplit !how many particle profile in z-direction 
       real :: ymin,ymax,zmin,zmax,xmax,xmin
       real, allocatable :: uext(:,:,:), vext(:,:,:), wext(:,:,:)
       real, allocatable :: u_t(:,:,:), v_t(:,:,:), w_t(:,:,:)
@@ -551,6 +554,9 @@ c -------------- pointer association for stat arrays and get size
 c                of stat arrays isize for history files
 c
              isize = 0 
+             ncpvar=0
+             plncpvar=0
+             plnsplit=0
              wwsb    => c_s%wwsb     ; isize = isize + size(wwsb)
              engz    => c_s%engz     ; isize = isize + size(engz)
              engsbz  => c_s%engsbz   ; isize = isize + size(engsbz)
@@ -652,13 +658,13 @@ c
              phiv    => c_s%phiv
              
 
-        allocate(plc_s%pcount(maxnz,Nrp))
-        allocate(plc_s%pm1src(maxnz,Nrp))
-        allocate(plc_s%pm2src(maxnz,Nrp))
-        allocate(plc_s%pm3src(maxnz,Nrp))
-        allocate(plc_s%pTpsrc(maxnz,Nrp))
-        allocate(plc_s%pHPsrc(maxnz,Nrp))
-        allocate(plc_s%pTEpsrc(maxnz,Nrp))
+        allocate(plc_s%pcount(maxnz,Nrp));   plnsplit=plnsplit+1
+        allocate(plc_s%pm1src(maxnz,Nrp));   plncpvar=plncpvar+1
+        allocate(plc_s%pm2src(maxnz,Nrp));   plncpvar=plncpvar+1
+        allocate(plc_s%pm3src(maxnz,Nrp));   plncpvar=plncpvar+1
+        allocate(plc_s%pTpsrc(maxnz,Nrp));   plncpvar=plncpvar+1
+        allocate(plc_s%pHPsrc(maxnz,Nrp));   plncpvar=plncpvar+1
+        allocate(plc_s%pTEpsrc(maxnz,Nrp));   plncpvar=plncpvar+1
              !Poly-dispersed type
              plisize=0
              pcount  => plc_s%pcount;  plisize=plisize+size(pcount)
@@ -7543,7 +7549,7 @@ c     real plstat(1:nnz,pjs*nplstat) !partcountply, partcount2, 4/23/2019 test
       js=34
       ns=5
       nstat=js+ns*nscl
-      pjs=7
+      pjs=plnsplit+plncpvar
       nplstat=pjs*Nrp
       if(myid==0) write(*,*) 'size plstat=',nnz,'x',nplstat
       allocate(stat(nnz,nstat),plstat(nnz,nplstat))
@@ -8482,7 +8488,9 @@ c
          f32(i) = f(i)
       enddo
 c
+      if(imndbug==1.or.mod(it,itape)==0) then
       write(*,*) 'plhispid',plhispid,'profile passed to write',f32 !test
+      end if
       write(plhispid,err=979,rec=plkrec1) (f32(i),i=1,num)
       !test
 c
@@ -10833,10 +10841,10 @@ c         pcount = 0
             part%zp_max=part%xp(3)
          endif
          !TEST PASSED !Debug Test 10/23/2018
-	if(imndbug==1) then
+         if(imndbug==1) then
          if(isnan(part%radius)) write(*,*)'PARTICLE TEMP LOADING ERROR',
      +part%Tprhs_s,part%Tprhs_L,part%Tp,dt
-	endif
+         endif
 
          !Now advance the particle and position via RK3 (same as velocity)
         
@@ -10852,16 +10860,17 @@ c         pcount = 0
 
          myRep_avg = myRep_avg + Rep
 
-	 if (part%xp(3) .le. 0.001) then      !Tianze 7/29/15
-	 mydmb = mydmb + part%radius
-	 mytpnb  = mytpnb +1
-	 else if ((part%xp(3) .ge. 0.0195) .AND. (part%xp(3) .le. 0.0205)) then
-	 mydmm = mydmm + part%radius
-	 mytpnm  = mytpnm +1
-	 else if (part%xp(3) .ge. 0.039) then
-	 mydmt = mydmt + part%radius
-	 mytpnt  = mytpnt +1
-	 end if
+         if (part%xp(3) .le. 0.001) then      !Tianze 7/29/15
+         mydmb = mydmb + part%radius
+         mytpnb  = mytpnb +1
+         else if 
+     +((part%xp(3) .ge. 0.0195) .AND. (part%xp(3) .le. 0.0205)) then
+         mydmm = mydmm + part%radius
+         mytpnm  = mytpnm +1
+         else if (part%xp(3) .ge. 0.039) then
+         mydmt = mydmt + part%radius
+         mytpnt  = mytpnt +1
+         end if
 
          corrfac = (1.0 + 0.15*Rep**(0.687))
          myphip_sum = myphip_sum + Volp*rhop
@@ -10872,7 +10881,7 @@ c         pcount = 0
          !Compute Nusselt number for particle:
          !Ranz-Marshall relation
          Nup = 2.0 + 0.6*Rep**(1.0/2.0)*Pra**(1.0/3.0)
-	 Shp = 2.0 + 0.6*Rep**(1.0/2.0)*Sc**(1.0/3.0) !Brian 7/18/14
+         Shp = 2.0 + 0.6*Rep**(1.0/2.0)*Sc**(1.0/3.0) !Brian 7/18/14
 
 
 
@@ -10880,9 +10889,9 @@ c         pcount = 0
 
 
 
-	 !Mass Transfer calculations
+         !Mass Transfer calculations
          TfC = part%Tf-273.15
-	 einf = 610.94*EXP(17.6257*TfC/(TfC+243.04)) !Brian 7/29/14-3
+         einf = 610.94*EXP(17.6257*TfC/(TfC+243.04)) !Brian 7/29/14-3
          TpC = part%Tp-273.15
          Lv =(25.0 - 0.02274*26.0)*10.0**5  !search 0.02274 http://www.lnu.edu.ua/faculty/geology/phis_geo/fourman/library-Earth/An%20Introduction%20to%20Atmospheric%20Physics.pdf
 
@@ -10890,13 +10899,13 @@ c         pcount = 0
          Eff_S = Ion*Os*m_s*Mw/Ms/(Volp*rhop-m_s)
          estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)
      +                                           +Eff_C-Eff_S) !Brian 8/14/14-3
-	 part%qstar = Mw/Ru*estar/part%Tp/rhoa
+         part%qstar = Mw/Ru*estar/part%Tp/rhoa
          
          !Debug Test 10/23/2018
-	if(imndbug==1) then
+        if(imndbug==1) then
          if(isnan(part%qstar)) write(*,*)'PARTICLE QSTAR CALC ERROR',
      +part%Tf,TfC,einf,Tpc,Lv,Eff_c,Eff_s,estar,part%qstar,part%radius
-	endif
+        endif
   
          xtmp(1:3) = part%xp(1:3) + dt*zetas(istage)*part%xrhs(1:3)
          vtmp(1:3) = part%vp(1:3) + dt*zetas(istage)*part%vrhs(1:3) 
@@ -10929,9 +10938,9 @@ c         pcount = 0
             part%zp_max=max(part%zp_max,part%xp(3))
             part%Tp = Tptmp + dt*gama(istage)*part%Tprhs_s
             part%Tp = part%Tp + dt*gama(istage)*part%Tprhs_L
-	    part%radius = radiustmp + dt*gama(istage)*part%radrhs !Brian 7/22/14
+            part%radius = radiustmp + dt*gama(istage)*part%radrhs !Brian 7/22/14
 
-	if (imndbug==1) then
+        if (imndbug==1) then
          !Debug Test 10/23/2018
          if(isnan(part%Tp)) write(*,*) 'PARTICLE TEMP RK3 ERROR',
      +part%Tprhs_s,part%Tprhs_L,part%Tp,dt
@@ -10939,7 +10948,7 @@ c         pcount = 0
          if(isnan(part%Tp)) write(*,*) 'PROC ID=',part%procidx
          if(isnan(part%Tp)) write(*,*) 'pID=',part%pidx
          if(isnan(part%Tp)) write(*,*) 'PART Z LOC',part%xp(3)
-	end if
+        end if
 
 
 
@@ -11075,6 +11084,8 @@ c         pcount = 0
 
 
 
+
+      if(myid==0) write(*,*)'before transfering particle stats'
       ! for poly-dispersity !itterate on icls
       do icls=1,Nrp
       call ztox_trans(partcountply_t(0:nnz+1,iys:iye,mxs:mxe,icls),
@@ -11106,6 +11117,7 @@ c         pcount = 0
      +       mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +       ncpu_s,numprocs)
       end do  
+      if(myid==0) write(*,*)'after transfering particle stats'
 c     call ztox_trans(partcountply_t(0:nnz+1,iys:iye,mxs:mxe),
 c    +                partcountply(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
 c    +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
@@ -13396,6 +13408,7 @@ c    +     (pi2/2.0)*part%radius*nuf)*wtt/dV
       part => part%next
       end do
 
+      !Out side particle iteration loop
       !Now, partsrc and partTsrc have halos on each processor - give these to the rightful owner:
       crbuf_s=0.0;ctbuf_s=0.0
       clbuf_r=0.0;cbbuf_r=0.0
@@ -13412,44 +13425,44 @@ c    +     (pi2/2.0)*part%radius*nuf)*wtt/dV
       ctbuf_s(1:nnz+2,1:iye-iys+2,5)=partHsrc_t(0:nnz+1,
      +                                iys:iye+1,mxe+1)
 
-       ctbuf_s(1:nnz+2,1:iye-iys+2,6)=partTEsrc_t(0:nnz+1,
+      ctbuf_s(1:nnz+2,1:iye-iys+2,6)=partTEsrc_t(0:nnz+1,
      +                                iys:iye+1,mxe+1)
 
       ncount = 6*(nnz+2)*(iye-iys+2) 
+      if(myid==0) write(*,*)'before sending top to bottom'
       call mpi_sendrecv(ctbuf_s,ncount,mpi_real8,tproc,1,
      +     cbbuf_r,ncount,mpi_real8,bproc,1,mpi_comm_world,istatus,ierr)
       ! poly-dispersity
+      if(myid==0) write(*,*)'after sending top to bottom'
       do icls=1,Nrp
-      ibufg=(icls-1)*1 !group for same size starting with 0
-      !ibufg=0
-      !1:3,4,5,6
-      !ibufg=1*Nrp*6, e.g. 1*2*6=
-
-      if (part%rpind==icls) then
+      ibufg=(icls-1)*6 !group for same size starting with 0
+      !icls=1,ibufg=0*6=0, ==> ibufg+1=1,2,3,4,5,6
+      !icls=2,ibufg=1*6, ==> ibufg+1=7,8,9,10,11,12
+      !icls=3,ibufg=2*6, ==> ibufg+1=13,14,15,16,17,18 ... 
       plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+1)=
+     +        partsrc1ply_t(0:nnz+1,iys:iye+1,mxe+1,icls)
+
+      plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+2)=
+     +        partsrc2ply_t(0:nnz+1,iys:iye+1,mxe+1,icls)
+
+      plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+3)=
+     +        partsrc3ply_t(0:nnz+1,iys:iye+1,mxe+1,icls)
+
+      plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+4)=
      +        partTsrcply_t(0:nnz+1,iys:iye+1,mxe+1,icls)
 
-      plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+1)=
-     +        partTsrcply_t(0:nnz+1,iys:iye+1,mxe+1,icls)
+      plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+5)=
+     +        partHsrcply_t(0:nnz+1,iys:iye+1,mxe+1,icls)
 
-      plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+1)=
-     +        partTsrcply_t(0:nnz+1,iys:iye+1,mxe+1)
-
-      plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+1)=
-     +        partTsrcply_t(0:nnz+1,iys:iye+1,mxe+1)
-
-      plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+1)=
-     +        partTsrcply_t(0:nnz+1,iys:iye+1,mxe+1)
-
-      plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+1)=
-     +        partTsrcply_t(0:nnz+1,iys:iye+1,mxe+1)
-
-      end if 
+      plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+6)=
+     +        partTEsrcply_t(0:nnz+1,iys:iye+1,mxe+1,icls)
       end do
-      plncount=1*Nrp*(nnz+2)*(iye-iys+2)
+      plncount=6*Nrp*(nnz+2)*(iye-iys+2)
+      if(myid==0) write(*,*)'before pl sending top to bottom'
       call mpi_sendrecv(plctbuf_s,plncount,mpi_real8,tproc,1,
-     +  plcbbuf_r,ncount,mpi_real8,bproc,1,mpi_comm_world,istatus,ierr)
+     + plcbbuf_r,plncount,mpi_real8,bproc,1,mpi_comm_world,istatus,ierr)
 
+      if(myid==0) write(*,*)'after pl sending top to bottom'
       !Now just add the contents of the receive buffer into the entire 
       !iys column of this proc:
 
@@ -13464,7 +13477,6 @@ c    +     (pi2/2.0)*part%radius*nuf)*wtt/dV
      +   partHsrc_t(0:nnz+1,iys:iye+1,mxs) + 
      +     cbbuf_r(1:nnz+2,1:iye-iys+2,5)
       
-    
       partTEsrc_t(0:nnz+1,iys:iye+1,mxs) = 
      +   partTEsrc_t(0:nnz+1,iys:iye+1,mxs) + 
      +   cbbuf_r(1:nnz+2,1:iye-iys+2,6)
@@ -13486,26 +13498,33 @@ c    +     (pi2/2.0)*part%radius*nuf)*wtt/dV
      +     clbuf_r,ncount,mpi_real8,lproc,2,mpi_comm_world,istatus,ierr)
       !poly-disp. for plcrbuf
       do icls=1,Nrp
-      ibufg=(icls-1)*1 !group for same size starting with 0
-      !ibufg=0
-      !1:3,4,5,6
-      !ibufg=1*Nrp*6, e.g. 1*2*6=
-
-      if (icls==1) then
-
+      ibufg=(icls-1)*6 !group for same size starting with 0
+      !icls=1,ibufg=0*6=0, ==> ibufg+1=1,2,3,4,5,6
+      !icls=2,ibufg=1*6, ==> ibufg+1=7,8,9,10,11,12
+      !icls=3,ibufg=2*6, ==> ibufg+1=13,14,15,16,17,18 ... 
       plcrbuf_s(1:nnz+2,1:mxe-mxs+1,ibufg+1)=
-     +        partTsrcply_t(0:nnz+1,iye+1,mxs:mxe)
-      else if (icls==2) then
-      plcrbuf_s(1:nnz+2,1:mxe-mxs+1,ibufg+1)=
-     +        partTsrc2_t(0:nnz+1,iye+1,mxs:mxe)
-      end if 
+     +        partsrc1ply_t(0:nnz+1,iye+1,mxs:mxe,icls)
 
+      plcrbuf_s(1:nnz+2,1:mxe-mxs+1,ibufg+2)=
+     +        partsrc2ply_t(0:nnz+1,iye+1,mxs:mxe,icls)
+
+      plcrbuf_s(1:nnz+2,1:mxe-mxs+1,ibufg+3)=
+     +        partsrc3ply_t(0:nnz+1,iye+1,mxs:mxe,icls)
+
+      plcrbuf_s(1:nnz+2,1:mxe-mxs+1,ibufg+4)=
+     +        partTsrcply_t(0:nnz+1,iye+1,mxs:mxe,icls)
+
+      plcrbuf_s(1:nnz+2,1:mxe-mxs+1,ibufg+5)=
+     +        partHsrcply_t(0:nnz+1,iye+1,mxs:mxe,icls)
+
+      plcrbuf_s(1:nnz+2,1:mxe-mxs+1,ibufg+6)=
+     +        partTEsrcply_t(0:nnz+1,iye+1,mxs:mxe,icls)
       end do
 
       !Now send to right:
-      plncount = 1*Nrp*(nnz+2)*(mxe-mxs+1)
+      plncount = 6*Nrp*(nnz+2)*(mxe-mxs+1)
       call mpi_sendrecv(plcrbuf_s,plncount,mpi_real8,rproc,2,
-     +   plclbuf_r,ncount,mpi_real8,lproc,2,mpi_comm_world,istatus,ierr)
+     + plclbuf_r,plncount,mpi_real8,lproc,2,mpi_comm_world,istatus,ierr)
 
       !And again add the contents to the top/bottom rows of partsrc:
       partsrc_t(0:nnz+1,iys,mxs:mxe,1:3) = 
@@ -13522,27 +13541,34 @@ c    +     (pi2/2.0)*part%radius*nuf)*wtt/dV
      +                 clbuf_r(1:nnz+2,1:mxe-mxs+1,6)  
 
       !split for poly-dispersity
-      partTsrcply_t(0:nnz+1,iys,mxs:mxe) = 
-     +           partTsrcply_t(0:nnz+1,iys,mxs:mxe) + 
-     +                 plclbuf_r(1:nnz+2,1:mxe-mxs+1,4)   !split
-      partTsrc2_t(0:nnz+1,iys,mxs:mxe) = 
-     +           partTsrc2_t(0:nnz+1,iys,mxs:mxe) + 
-     +                 plclbuf_r(1:nnz+2,1:mxe-mxs+1,4)   !split
-       do icls=1,Nrp
-      ibufg=(icls-1)*1 !group for same size starting with 0
-      !ibufg=0
-      !1:3,4,5,6
-      !ibufg=1*Nrp*6, e.g. 1*2*6=
+      do icls=1,Nrp
+      ibufg=(icls-1)*6 !group for same size starting with 0
+      !icls=1,ibufg=0*6=0, ==> ibufg+1=1,2,3,4,5,6
+      !icls=2,ibufg=1*6, ==> ibufg+1=7,8,9,10,11,12
+      !icls=3,ibufg=2*6, ==> ibufg+1=13,14,15,16,17,18 ... 
+      partsrc1ply_t(0:nnz+1,iys,mxs:mxe,icls) = 
+     +           partsrc1ply_t(0:nnz+1,iys,mxs:mxe,icls) + 
+     +           plclbuf_r(1:nnz+2,1:mxe-mxs+1,ibufg+1)   !split  
 
-      if (icls==1) then
-      partTsrcply_t(0:nnz+1,iys,mxs:mxe) = 
-     +           partTsrcply_t(0:nnz+1,iys,mxs:mxe) + 
-     +                 plclbuf_r(1:nnz+2,1:mxe-mxs+1,ibufg+1)   !split  
-      else if (icls==2) then
-      partTsrc2_t(0:nnz+1,iys,mxs:mxe) = 
-     +           partTsrc2_t(0:nnz+1,iys,mxs:mxe) + 
-     +                 plclbuf_r(1:nnz+2,1:mxe-mxs+1,ibufg+1)   !split
-      end if 
+      partsrc2ply_t(0:nnz+1,iys,mxs:mxe,icls) = 
+     +           partsrc2ply_t(0:nnz+1,iys,mxs:mxe,icls) + 
+     +           plclbuf_r(1:nnz+2,1:mxe-mxs+1,ibufg+2)   !split  
+
+      partsrc3ply_t(0:nnz+1,iys,mxs:mxe,icls) = 
+     +           partsrc3ply_t(0:nnz+1,iys,mxs:mxe,icls) + 
+     +           plclbuf_r(1:nnz+2,1:mxe-mxs+1,ibufg+3)   !split  
+
+      partTsrcply_t(0:nnz+1,iys,mxs:mxe,icls) = 
+     +           partTsrcply_t(0:nnz+1,iys,mxs:mxe,icls) + 
+     +           plclbuf_r(1:nnz+2,1:mxe-mxs+1,ibufg+4)   !split  
+
+      partHsrcply_t(0:nnz+1,iys,mxs:mxe,icls) = 
+     +           partHsrcply_t(0:nnz+1,iys,mxs:mxe,icls) + 
+     +           plclbuf_r(1:nnz+2,1:mxe-mxs+1,ibufg+5)   !split  
+
+      partTEsrcply_t(0:nnz+1,iys,mxs:mxe,icls) = 
+     +           partTEsrcply_t(0:nnz+1,iys,mxs:mxe,icls) + 
+     +           plclbuf_r(1:nnz+2,1:mxe-mxs+1,ibufg+6)   !split  
 
       end do
 
