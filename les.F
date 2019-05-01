@@ -8475,6 +8475,8 @@ c
       end subroutine
 
       subroutine write_polyprof(plhispid,plkrec1,num,f)
+      use pars
+      use particles
       implicit none
       integer,intent(in) :: plhispid,plkrec1
       integer,intent(in) :: num
