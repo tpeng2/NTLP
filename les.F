@@ -160,16 +160,18 @@ c     ----------------------------------------------------------------------
       real, allocatable :: qstarsum(:,:,:),qstarsum_t(:,:,:) 
 
       ! poly-dispersity, flux splitting, experiment for 2 sizes
-      real,allocatable :: partcount1(:,:,:),partcount1_t(:,:,:)
-      real,allocatable :: partcount2(:,:,:),partcount2_t(:,:,:)
-      real,allocatable :: partsrc1(:,:,:),partsrc1_t(:,:,:)
-      real,allocatable :: partsrc2(:,:,:),partsrc2_t(:,:,:)
-      real,allocatable :: partTsrc1(:,:,:),partTsrc1_t(:,:,:)
-      real,allocatable :: partTsrc2(:,:,:),partTsrc2_t(:,:,:)
-      real,allocatable :: partHsrc1(:,:,:),partHsrc1_t(:,:,:)
-      real,allocatable :: partHsrc2(:,:,:),partHsrc2_t(:,:,:)
-      real,allocatable :: partTEsrc1(:,:,:),partTEsrc1_t(:,:,:)
-      real,allocatable :: partTEsrc2(:,:,:),partTEsrc2_t(:,:,:)
+      real,allocatable :: partcountply(:,:,:,:),partcountply_t(:,:,:,:)
+      real,allocatable :: partsrc1ply(:,:,:,:), partsrc1ply_t(:,:,:,:)
+      real,allocatable :: partsrc2ply(:,:,:,:), partsrc2ply_t(:,:,:,:)
+      real,allocatable :: partsrc3ply(:,:,:,:), partsrc3ply_t(:,:,:,:)
+      real,allocatable :: partTsrcply(:,:,:,:), partTsrcply_t(:,:,:,:)
+      real,allocatable :: partHsrcply(:,:,:,:), partHsrcply_t(:,:,:,:)
+      real,allocatable :: partTEsrcply(:,:,:,:),partTEsrcply_t(:,:,:,:)
+      real,allocatable :: partTEsrc2(:,:,:),   partTEsrc2_t(:,:,:)
+      real,allocatable :: partHsrc2(:,:,:),    partHsrc2_t(:,:,:)
+      real,allocatable :: partTsrc2(:,:,:),    partTsrc2_t(:,:,:)
+      real,allocatable :: partsrc2(:,:,:),     partsrc2_t(:,:,:)
+      real,allocatable :: partcount2(:,:,:),     partcount2_t(:,:,:)
       ! counting particle
       integer :: particletype,pad_diff
       integer :: numpart,tnumpart,ngidx
@@ -6406,13 +6408,13 @@ c
       qstarsum_t = 0.0 
 
       !poly-dispersity
-      partcount1 = 0.0
-      partcount1_t = 0.0
+      partcountply = 0.0
+      partcountply_t = 0.0
       partcount2 = 0.0
       partcount2_t = 0.0
  
-      partTsrc1 = 0.0
-      partTsrc1_t = 0.0
+      partTsrcply = 0.0
+      partTsrcply_t = 0.0
       partTsrc2 = 0.0
       partTsrc2_t = 0.0
 c ------------ note set nmatch in sr. iso so that
@@ -7536,8 +7538,8 @@ c     parameter(pjs=5,nplstat=pjs*35) !pjs=how many quantities,
       real :: rlim !for "function rlim"
 c     real stat(1:nnz,nstat)
       real,allocatable::stat(:,:)
-c     real plstat(1:nnz,pjs*nplstat) !partcount1, partcount2, 4/23/2019 test
-      real,allocatable::plstat(:,:) !partcount1, partcount2, 4/23/2019 test
+c     real plstat(1:nnz,pjs*nplstat) !partcountply, partcount2, 4/23/2019 test
+      real,allocatable::plstat(:,:) !partcountply, partcount2, 4/23/2019 test
       js=34
       ns=5
       nstat=js+ns*nscl
@@ -7594,8 +7596,8 @@ c  ----------  for poly-dispersity stats (plstat)
        !..., iclsg=(icls-1)*js, then ..., (icls-1)+1==>icls*pjs
        !icls=Nrp,
 
-c        plstat(.,(icls-1)+1) = partcount1,partcount2,
-c        plstat(.,(icls-1)+2) = partTsrc1,partTsrc2
+c        plstat(.,(icls-1)+1) = partcountply,partcount2,
+c        plstat(.,(icls-1)+2) = partTsrcply,partTsrc2
 
 c
 c --------- use a trick with mpi reduce over all z to get averages
@@ -7680,26 +7682,33 @@ c
          stat(iz,33) = stat(iz,33) + partTEsrc(ix,iy,iz)
          stat(iz,34) = stat(iz,34) + qstarsum(ix,iy,iz)
          ! poly-dispersity
-         do icls=1,Nrp
-         iclsg=(icls-1)*pjs
-         if(icls==1) then
-         plstat(iz,iclsg+1)=plstat(iz,iclsg+1)+partcount1(ix,iy,iz)
-c        plstat(iz,iclsg+2)=plstat(iz,iclsg+2)+partsrc1(ix,iy,iz)
-c        plstat(iz,iclsg+3)=plstat(iz,iclsg+3)+partsrc1(ix,iy,iz)
-c        plstat(iz,iclsg+4)=plstat(iz,iclsg+4)+partsrc1(ix,iy,iz)
-         plstat(iz,iclsg+5)=plstat(iz,iclsg+5)+partTsrc1(ix,iy,iz)
-c        plstat(iz,iclsg+6)=plstat(iz,iclsg+6)+partHsrc1(ix,iy,iz)
-c        plstat(iz,iclsg+7)=plstat(iz,iclsg+7)+partTEsrc1(ix,iy,iz)
-         else if (icls==2) then
-         plstat(iz,iclsg+1)=plstat(iz,iclsg+1)+partcount2(ix,iy,iz)
-c        plstat(iz,iclsg+2)=plstat(iz,iclsg+2)+partsrc2(ix,iy,iz)
-c        plstat(iz,iclsg+3)=plstat(iz,iclsg+3)+partsrc2(ix,iy,iz)
-c        plstat(iz,iclsg+4)=plstat(iz,iclsg+4)+partsrc2(ix,iy,iz)
-         plstat(iz,iclsg+5)=plstat(iz,iclsg+5)+partTsrc2(ix,iy,iz)
-c        plstat(iz,iclsg+6)=plstat(iz,iclsg+6)+partHsrc2(ix,iy,iz)
-c        plstat(iz,iclsg+7)=plstat(iz,iclsg+7)+partTEsrc2(ix,iy,iz)
-         end if
-         end do
+       do icls=1,Nrp
+       iclsg=(icls-1)*pjs
+       plstat(iz,iclsg+1)=plstat(iz,iclsg+1)+partcountply(ix,iy,iz,icls)
+       plstat(iz,iclsg+2)=plstat(iz,iclsg+2)+partsrc1ply(ix,iy,iz,icls)
+       plstat(iz,iclsg+3)=plstat(iz,iclsg+3)+partsrc2ply(ix,iy,iz,icls)
+       plstat(iz,iclsg+4)=plstat(iz,iclsg+4)+partsrc3ply(ix,iy,iz,icls)
+       plstat(iz,iclsg+5)=plstat(iz,iclsg+5)+partTsrcply(ix,iy,iz,icls)
+       plstat(iz,iclsg+6)=plstat(iz,iclsg+6)+partHsrcply(ix,iy,iz,icls)
+       plstat(iz,iclsg+7)=plstat(iz,iclsg+7)+partTEsrcply(ix,iy,iz,icls)
+       if(icls==1) then
+c      plstat(iz,iclsg+1)=plstat(iz,iclsg+1)+partcountply(ix,iy,iz,1)
+c      plstat(iz,iclsg+2)=plstat(iz,iclsg+2)+partsrc1(ix,iy,iz)
+c      plstat(iz,iclsg+3)=plstat(iz,iclsg+3)+partsrc1(ix,iy,iz)
+c      plstat(iz,iclsg+4)=plstat(iz,iclsg+4)+partsrc1(ix,iy,iz)
+c      plstat(iz,iclsg+5)=plstat(iz,iclsg+5)+partTsrcply(ix,iy,iz)
+c      plstat(iz,iclsg+6)=plstat(iz,iclsg+6)+partHsrcply(ix,iy,iz)
+c      plstat(iz,iclsg+7)=plstat(iz,iclsg+7)+partTEsrcply(ix,iy,iz)
+       else if (icls==2) then
+       plstat(iz,iclsg+1)=plstat(iz,iclsg+1)+partcount2(ix,iy,iz)
+c      plstat(iz,iclsg+2)=plstat(iz,iclsg+2)+partsrc2(ix,iy,iz)
+c      plstat(iz,iclsg+3)=plstat(iz,iclsg+3)+partsrc2(ix,iy,iz)
+c      plstat(iz,iclsg+4)=plstat(iz,iclsg+4)+partsrc2(ix,iy,iz)
+       plstat(iz,iclsg+5)=plstat(iz,iclsg+5)+partTsrc2(ix,iy,iz)
+c      plstat(iz,iclsg+6)=plstat(iz,iclsg+6)+partHsrc2(ix,iy,iz)
+c      plstat(iz,iclsg+7)=plstat(iz,iclsg+7)+partTEsrc2(ix,iy,iz)
+       end if
+       end do
       enddo
       enddo
       if(mod(it,ihst)==0.and.imndbug.ne.0) then
@@ -8442,12 +8451,12 @@ c
       mid = nnz/4
 
       ! what to write for time series
-      write(pnhis1,6070) time,maxval(partcount1(1:nnx,iys:iye,1)),
+      write(pnhis1,6070) time,maxval(partcountply(1:nnx,iys:iye,1,1)),
      +maxval(partcount2(1:nnx,iys:iye,1)) 
  6070 format(3e17.8) 
       if (myid==0) then
         write(*,*)'iloc',iloc,'test poly-hist',time,
-     +maxval(partcount1(1:nnx,iys:iye,1)),
+     +maxval(partcountply(1:nnx,iys:iye,1,1)),
      +maxval(partcount2(1:nnx,iys:iye,1))
         write(*,*) 'test plkrec',plkrec,'plisize',plisize
       end if
@@ -8801,14 +8810,30 @@ c     +         Text(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3))
 
       ! poly-dispersity
       
-      allocate(partcount1(nnx,iys:iye,izs-1:ize+1))
-      allocate(partcount1_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(partcountply(nnx,iys:iye,izs-1:ize+1,Nrp))
+      allocate(partcountply_t(0:nnz+1,iys:iye,mxs:mxe,Nrp))
+
+      allocate(partsrc1ply(nnx,iys:iye,izs-1:ize+1,Nrp))
+      allocate(partsrc1ply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,Nrp))
+
+      allocate(partsrc2ply(nnx,iys:iye,izs-1:ize+1,Nrp))
+      allocate(partsrc2ply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,Nrp))
+
+      allocate(partsrc3ply(nnx,iys:iye,izs-1:ize+1,Nrp))
+      allocate(partsrc3ply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,Nrp))
+
+      allocate(partTsrcply(nnx,iys:iye,izs-1:ize+1,Nrp))
+      allocate(partTsrcply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,Nrp))
+
+      allocate(partHsrcply(nnx,iys:iye,izs-1:ize+1,Nrp))
+      allocate(partHsrcply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,Nrp))
+
+      allocate(partTEsrcply(nnx,iys:iye,izs-1:ize+1,Nrp))
+      allocate(partTEsrcply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,Nrp))
+
       allocate(partcount2(nnx,iys:iye,izs-1:ize+1))
       allocate(partcount2_t(0:nnz+1,iys:iye,mxs:mxe))
-
-      allocate(partTsrc1(nnx,iys:iye,izs-1:ize+1))
       allocate(partTsrc2(nnx,iys:iye,izs-1:ize+1))
-      allocate(partTsrc1_t(0:nnz+1,iys:iye+1,mxs:mxe+1))
       allocate(partTsrc2_t(0:nnz+1,iys:iye+1,mxs:mxe+1))
 c ------------- allocate space for boundary condition arrays
 c               on top and bottom of domain
@@ -10725,7 +10750,7 @@ c
       real :: g(3)
       !real :: g(3) = (/0.0, 0.0, 0.0/)
       real :: denom,dtl,sigma,ttest
-      integer :: ix,iy,iz
+      integer :: ix,iy,iz,icls
       integer :: mytpnb,mytpnm,mytpnt,tpnb,tpnm,tpnt    !Tianze 7/29/15
       real :: mydmb,mydmm,mydmt   !Tianze 7/29/15
       real :: Rep,diff(3),diffnorm,corrfac,myRep_avg
@@ -10734,9 +10759,8 @@ c
       real :: myphip_sum,myphiw_sum,myphiv_sum,Volp      
       real :: TfC,TpC,Eff_C,Eff_S
       real :: t_s,t_f,t_s1,t_f1!,qq
-
       g(1:3) = (/0.0, 0.0, part_grav/)
-
+      
       !First fill extended velocity field for interpolation
       !t_s = mpi_wtime()
       call fill_ext 
@@ -10773,7 +10797,7 @@ c
       mydmt = 0.0     !Tianze 7/29/15
 
       ! poly-dispersity related
-      partcount1_t=0.0
+      partcountply_t=0.0
       partcount2_t=0.0
 
       !t_s = mpi_wtime()
@@ -11051,21 +11075,51 @@ c         pcount = 0
 
 
 
-      ! for poly-dispersity
-      call ztox_trans(partcount1_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                partcount1(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+      ! for poly-dispersity !itterate on icls
+      do icls=1,Nrp
+      call ztox_trans(partcountply_t(0:nnz+1,iys:iye,mxs:mxe,icls),
+     +       partcountply(1:nnx,iys:iye,izs-1:ize+1,icls),nnx,nnz,mxs,
+     +       mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +       ncpu_s,numprocs)
+      call ztox_trans(partsrc1ply_t(0:nnz+1,iys:iye,mxs:mxe,icls),
+     +       partsrc1ply(1:nnx,iys:iye,izs-1:ize+1,icls),nnx,nnz,mxs,
+     +       mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +       ncpu_s,numprocs)
+      call ztox_trans(partsrc2ply_t(0:nnz+1,iys:iye,mxs:mxe,icls),
+     +       partsrc2ply(1:nnx,iys:iye,izs-1:ize+1,icls),nnx,nnz,mxs,
+     +       mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +       ncpu_s,numprocs)
+      call ztox_trans(partsrc3ply_t(0:nnz+1,iys:iye,mxs:mxe,icls),
+     +       partsrc3ply(1:nnx,iys:iye,izs-1:ize+1,icls),nnx,nnz,mxs,
+     +       mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +       ncpu_s,numprocs)
+      call ztox_trans(partTsrcply_t(0:nnz+1,iys:iye,mxs:mxe,icls),
+     +       partTsrcply(1:nnx,iys:iye,izs-1:ize+1,icls),nnx,nnz,mxs,
+     +       mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +       ncpu_s,numprocs)
+      call ztox_trans(partHsrcply_t(0:nnz+1,iys:iye,mxs:mxe,icls),
+     +       partHsrcply(1:nnx,iys:iye,izs-1:ize+1,icls),nnx,nnz,mxs,
+     +       mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +       ncpu_s,numprocs)
+      call ztox_trans(partTEsrcply_t(0:nnz+1,iys:iye,mxs:mxe,icls),
+     +       partTEsrcply(1:nnx,iys:iye,izs-1:ize+1,icls),nnx,nnz,mxs,
+     +       mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +       ncpu_s,numprocs)
+      end do  
+c     call ztox_trans(partcountply_t(0:nnz+1,iys:iye,mxs:mxe),
+c    +                partcountply(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+c    +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+c    +                ncpu_s,numprocs)
 
       call ztox_trans(partcount2_t(0:nnz+1,iys:iye,mxs:mxe),
      +                partcount2(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
 
-      call ztox_trans(partTsrc1_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                partTsrc1(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+c     call ztox_trans(partTsrcply_t(0:nnz+1,iys:iye,mxs:mxe),
+c    +                partTsrcply(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+c    +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+c    +                ncpu_s,numprocs)
 
       call ztox_trans(partTsrc2_t(0:nnz+1,iys:iye,mxs:mxe),
      +                partTsrc2(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
@@ -11075,20 +11129,20 @@ c         pcount = 0
 
       !test
       if(myid==0.and.istage==3) then
-         write(*,*) 'it',it,'cpu0 sum(partcount)',sum(partcount)
-         write(*,*) 'it',it,'cpu0 sum(partcount_t)',sum(partcount_t)
-         write(*,*) 'it',it,'cpu0 sum(partcount1)',sum(partcount1)
-         write(*,*) 'it',it,'cpu0 sum(partcount1_t)',sum(partcount1_t)
-         write(*,*) 'it',it,'cpu0 sum(partcount2)',sum(partcount2)
-         write(*,*) 'it',it,'cpu0 sum(partcount2_t)',sum(partcount2_t)
+       write(*,*)it,'cpu0 sum(partcount)',sum(partcount)
+       write(*,*)it,'cpu0 sum(partcount_t)',sum(partcount_t)
+       write(*,*)it,'cpu0 sum(partcountply)',sum(partcountply)
+       write(*,*)it,'cpu0 sum(partcountply_t)',sum(partcountply_t)
+       write(*,*)it,'cpu0 sum(partcount2)',sum(partcount2)
+       write(*,*)it,'cpu0 sum(partcount2_t)',sum(partcount2_t)
       end if
       if(myid==1.and.istage==3) then
-         write(*,*) 'it',it,'cpu1 sum(partcount)',sum(partcount)
-         write(*,*) 'it',it,'cpu1 sum(partcount_t)',sum(partcount_t)
-         write(*,*) 'it',it,'cpu1 sum(partcount1)',sum(partcount1)
-         write(*,*) 'it',it,'cpu1 sum(partcount1_t)',sum(partcount1_t)
-         write(*,*) 'it',it,'cpu1 sum(partcount2)',sum(partcount2)
-         write(*,*) 'it',it,'cpu1 sum(partcount2_t)',sum(partcount2_t)
+       write(*,*) 'it',it,'cpu1 sum(partcount)',sum(partcount)
+       write(*,*) 'it',it,'cpu1 sum(partcount_t)',sum(partcount_t)
+       write(*,*) 'it',it,'cpu1 sum(partcountply)',sum(partcountply)
+       write(*,*) 'it',it,'cpu1 sum(partcountply_t)',sum(partcountply_t)
+       write(*,*) 'it',it,'cpu1 sum(partcount2)',sum(partcount2)
+       write(*,*) 'it',it,'cpu1 sum(partcount2_t)',sum(partcount2_t)
       end if
       !t_s = mpi_wtime
       !Get particle count:
@@ -12566,8 +12620,18 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       partTEsrc = 0.0
       partTEsrc_t = 0.0
       !poly-disp. split
-      partTsrc1 = 0.0
-      partTsrc1_t = 0.0
+      partsrc1ply = 0.0
+      partsrc1ply_t = 0.0
+      partsrc2ply = 0.0
+      partsrc2ply_t = 0.0
+      partsrc3ply = 0.0
+      partsrc3ply_t = 0.0
+      partTsrcply = 0.0
+      partTsrcply_t = 0.0
+      partHsrcply = 0.0
+      partHsrcply_t = 0.0
+      partTEsrcply = 0.0
+      partTEsrcply_t = 0.0
       partTsrc2 = 0.0
       partTsrc2_t = 0.0
       !calculate particle generated in each class
@@ -13093,15 +13157,17 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       end if
       ! splitting partcount
 
-      if (part%rpind==1) then
-        partcount1_t(kpt,jpt,ipt) = partcount1_t(kpt,jpt,ipt) + 1.0
-        !test
-        if (myid==0.and.mod(it,ihst)==0.and.imndbug.ne.0) then
-        write(*,*) 'it',it,'sum(partcount1_t)@cpu0',sum(partcount1_t)
-        end if
-      else if (part%rpind==2) then
-        partcount2_t(kpt,jpt,ipt) = partcount2_t(kpt,jpt,ipt) + 1.0
-      end if 
+      partcountply_t(kpt,jpt,ipt,part%rpind)=
+     + partcountply_t(kpt,jpt,ipt,part%rpind)+1.0
+c     if (part%rpind==1) then
+c       partcountply_t(kpt,jpt,ipt) = partcountply_t(kpt,jpt,ipt) + 1.0
+c       !test
+c       if (myid==0.and.mod(it,ihst)==0.and.imndbug.ne.0) then
+c       write(*,*) 'it',it,'sum(partcountply_t)@cpu0',sum(partcountply_t)
+c       end if
+c     else if (part%rpind==2) then
+c       partcount2_t(kpt,jpt,ipt) = partcount2_t(kpt,jpt,ipt) + 1.0
+c     end if 
 
       !Get su mean, mean-squared of particle velocities at each level
       upwp_t(kpt,jpt,ipt) = upwp_t(kpt,jpt,ipt) + part%vp(1)*part%vp(3)
@@ -13170,7 +13236,12 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       partTEsrc_t = 0.0
 
       !poly-disperse split
-      partTsrc1_t=0.0
+      partsrc1ply_t=0.0
+      partsrc2ply_t=0.0
+      partsrc3ply_t=0.0
+      partTsrcply_t=0.0
+      partHsrcply_t = 0.0
+      partTEsrcply_t=0.0
       partTsrc2_t=0.0
 
       part => first_particle
@@ -13264,20 +13335,6 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
      +     partHsrc_t(iz,iy,ix) +  !minus comes later
      +     rhow/rhoa*pi2*2*part%radius**2*part%radrhs*wtt/dV
 
-        ! poly-disp. split
-      if (part%rpind.eq.1) then
-      partTsrc1_t(iz,iy,ix) =
-     +     partTsrc1_t(iz,iy,ix) +
-     +     (part%Tprhs_s*6.0*rhow/rhop/CpaCpp/taup_i*
-     +     (pi2/2.0)*part%radius*nuf)*wtt/dV
-      else if (part%rpind.eq.2) then
-      partTsrc2_t(iz,iy,ix) =
-     +     partTsrc2_t(iz,iy,ix) +
-     +     (part%Tprhs_s*6.0*rhow/rhop/CpaCpp/taup_i*
-     +     (pi2/2.0)*part%radius*nuf)*wtt/dV
-      end if
-
-
 !      http://eesc.columbia.edu/courses/ees/climate/SI_Units.pdf
 !      or http://catalog.conveyorspneumatic.com/Asset/FLS%20Specific%20Heat%20Capacities%20of%20Gases.pdf
        Cvv = 1463.0 !J/degkg
@@ -13290,6 +13347,43 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
      +                  part%radrhs*Cpv/Cpa*part%Tp*wtt/dV -
      +         rhow/rhoa*pi2*2*part%radius**2*
      +                  part%radrhs*Cpv/Cpa*part%Tf*wtt/dV
+
+        ! poly-disp. split
+      partsrc1ply_t(iz,iy,ix,part%rpind) =
+     +     partsrc1ply_t(iz,iy,ix,part%rpind) +
+     +     partmass/rhoa*(part%vrhs(1)+g(1))*wtt/dV
+      partsrc2ply_t(iz,iy,ix,part%rpind) =
+     +     partsrc2ply_t(iz,iy,ix,part%rpind) +
+     +     partmass/rhoa*(part%vrhs(2)+g(2))*wtt/dV
+      partsrc3ply_t(iz,iy,ix,part%rpind) =
+     +     partsrc2ply_t(iz,iy,ix,part%rpind) +
+     +     partmass/rhoa*(part%vrhs(3)+g(3))*wtt/dV
+      partTsrcply_t(iz,iy,ix,part%rpind) =
+     +     partTsrcply_t(iz,iy,ix,part%rpind) +
+     +     (part%Tprhs_s*6.0*rhow/rhop/CpaCpp/taup_i*
+     +     (pi2/2.0)*part%radius*nuf)*wtt/dV
+      partHsrcply_t(iz,iy,ix,part%rpind) =     !Brian 8/5/14
+     +     partHsrcply_t(iz,iy,ix,part%rpind) +  !minus comes later
+     +     rhow/rhoa*pi2*2*part%radius**2*part%radrhs*wtt/dV
+      partTEsrcply_t(iz,iy,ix,part%rpind) = 
+     +     partTEsrcply_t(iz,iy,ix,part%rpind) +  !minus comes later
+     +         rhow/rhoa*pi2*2*part%radius**2*
+     +                  part%radrhs*Cpv/Cpa*part%Tp*wtt/dV -
+     +         rhow/rhoa*pi2*2*part%radius**2*
+     +                  part%radrhs*Cpv/Cpa*part%Tf*wtt/dV
+
+      if (part%rpind.eq.1) then
+c     partTsrcply_t(iz,iy,ix) =
+c    +     partTsrcply_t(iz,iy,ix) +
+c    +     (part%Tprhs_s*6.0*rhow/rhop/CpaCpp/taup_i*
+c    +     (pi2/2.0)*part%radius*nuf)*wtt/dV
+      else if (part%rpind.eq.2) then
+      partTsrc2_t(iz,iy,ix) =
+     +     partTsrc2_t(iz,iy,ix) +
+     +     (part%Tprhs_s*6.0*rhow/rhop/CpaCpp/taup_i*
+     +     (pi2/2.0)*part%radius*nuf)*wtt/dV
+      end if
+
 
       ! endif
 
@@ -13331,12 +13425,25 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       !1:3,4,5,6
       !ibufg=1*Nrp*6, e.g. 1*2*6=
 
-      if (icls==1) then
+      if (part%rpind==icls) then
       plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+1)=
-     +        partTsrc1_t(0:nnz+1,iys:iye+1,mxe+1)
-      else if (icls==2) then
+     +        partTsrcply_t(0:nnz+1,iys:iye+1,mxe+1,icls)
+
       plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+1)=
-     +        partTsrc2_t(0:nnz+1,iys:iye+1,mxe+1)
+     +        partTsrcply_t(0:nnz+1,iys:iye+1,mxe+1,icls)
+
+      plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+1)=
+     +        partTsrcply_t(0:nnz+1,iys:iye+1,mxe+1)
+
+      plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+1)=
+     +        partTsrcply_t(0:nnz+1,iys:iye+1,mxe+1)
+
+      plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+1)=
+     +        partTsrcply_t(0:nnz+1,iys:iye+1,mxe+1)
+
+      plctbuf_s(1:nnz+2,1:iye-iys+2,ibufg+1)=
+     +        partTsrcply_t(0:nnz+1,iys:iye+1,mxe+1)
+
       end if 
       end do
       plncount=1*Nrp*(nnz+2)*(iye-iys+2)
@@ -13387,7 +13494,7 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       if (icls==1) then
 
       plcrbuf_s(1:nnz+2,1:mxe-mxs+1,ibufg+1)=
-     +        partTsrc1_t(0:nnz+1,iye+1,mxs:mxe)
+     +        partTsrcply_t(0:nnz+1,iye+1,mxs:mxe)
       else if (icls==2) then
       plcrbuf_s(1:nnz+2,1:mxe-mxs+1,ibufg+1)=
      +        partTsrc2_t(0:nnz+1,iye+1,mxs:mxe)
@@ -13415,8 +13522,8 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
      +                 clbuf_r(1:nnz+2,1:mxe-mxs+1,6)  
 
       !split for poly-dispersity
-      partTsrc1_t(0:nnz+1,iys,mxs:mxe) = 
-     +           partTsrc1_t(0:nnz+1,iys,mxs:mxe) + 
+      partTsrcply_t(0:nnz+1,iys,mxs:mxe) = 
+     +           partTsrcply_t(0:nnz+1,iys,mxs:mxe) + 
      +                 plclbuf_r(1:nnz+2,1:mxe-mxs+1,4)   !split
       partTsrc2_t(0:nnz+1,iys,mxs:mxe) = 
      +           partTsrc2_t(0:nnz+1,iys,mxs:mxe) + 
@@ -13428,8 +13535,8 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       !ibufg=1*Nrp*6, e.g. 1*2*6=
 
       if (icls==1) then
-      partTsrc1_t(0:nnz+1,iys,mxs:mxe) = 
-     +           partTsrc1_t(0:nnz+1,iys,mxs:mxe) + 
+      partTsrcply_t(0:nnz+1,iys,mxs:mxe) = 
+     +           partTsrcply_t(0:nnz+1,iys,mxs:mxe) + 
      +                 plclbuf_r(1:nnz+2,1:mxe-mxs+1,ibufg+1)   !split  
       else if (icls==2) then
       partTsrc2_t(0:nnz+1,iys,mxs:mxe) = 
