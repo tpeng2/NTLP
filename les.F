@@ -8,8 +8,9 @@ c     ----------------------------------------------------------------------
       integer :: imndbug
       ! In params.in 
       integer :: 
-     +     iti,itmax, imean, ihst,itape,
+     +     iti,itmax, imean, ihst,itape
      +     itstr, it_his, it_viz, i_viz   !change u.le if iti >0
+      integer::iply_bat,iply_beg,iply_end,plsize !poly-disp. bat size, beg loc
       ! In params. in
       integer ::
      +     noalis, ismlt, ifree, isfc, iradup,
@@ -6414,6 +6415,7 @@ c
       qstarsum_t = 0.0 
 
       !poly-dispersity
+      call calc_plyloc(it,Nrp,nnz+2,6) 
       partcountply = 0.0
       partcountply_t = 0.0
       partcount2 = 0.0
@@ -6423,6 +6425,7 @@ c
       partTsrcply_t = 0.0
       partTsrc2 = 0.0
       partTsrc2_t = 0.0
+
 c ------------ note set nmatch in sr. iso so that
 c              it is compatible with conditions here
 c
@@ -7550,7 +7553,7 @@ c     real plstat(1:nnz,pjs*nplstat) !partcountply, partcount2, 4/23/2019 test
       ns=5
       nstat=js+ns*nscl
       pjs=plnsplit+plncpvar
-      nplstat=pjs*Nrp
+      nplstat=pjs*Nrp*itape/ihst !store everything in one batch
       if(myid==0) write(*,*) 'size plstat=',nnz,'x',nplstat
       allocate(stat(nnz,nstat),plstat(nnz,nplstat))
 c
@@ -8819,27 +8822,32 @@ c     +         Text(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3))
       allocate(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe)) 
 
       ! poly-dispersity
-      
-      allocate(partcountply(nnx,iys:iye,izs-1:ize+1,Nrp))
-      allocate(partcountply_t(0:nnz+1,iys:iye,mxs:mxe,Nrp))
+      ! to solve communication waste, now use larger memory
+      ! but save time, one batch of the size stored is
+      ! nszply=int(Nrp*itape/ihst)
+      ! note: no implicit none in this subroutine
+      nszply=int(Nrp*itape/ihst) 
+      !call calc_plyloc(it,Nrp,nnz+2,6) 
+      allocate(partcountply(nnx,iys:iye,izs-1:ize+1,nszply))
+      allocate(partcountply_t(0:nnz+1,iys:iye,mxs:mxe,nszply))
 
-      allocate(partsrc1ply(nnx,iys:iye,izs-1:ize+1,Nrp))
-      allocate(partsrc1ply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,Nrp))
+      allocate(partsrc1ply(nnx,iys:iye,izs-1:ize+1,nszply))
+      allocate(partsrc1ply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,nszply))
 
-      allocate(partsrc2ply(nnx,iys:iye,izs-1:ize+1,Nrp))
-      allocate(partsrc2ply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,Nrp))
+      allocate(partsrc2ply(nnx,iys:iye,izs-1:ize+1,nszply))
+      allocate(partsrc2ply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,nszply))
 
-      allocate(partsrc3ply(nnx,iys:iye,izs-1:ize+1,Nrp))
-      allocate(partsrc3ply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,Nrp))
+      allocate(partsrc3ply(nnx,iys:iye,izs-1:ize+1,nszply))
+      allocate(partsrc3ply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,nszply))
 
-      allocate(partTsrcply(nnx,iys:iye,izs-1:ize+1,Nrp))
-      allocate(partTsrcply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,Nrp))
+      allocate(partTsrcply(nnx,iys:iye,izs-1:ize+1,nszply))
+      allocate(partTsrcply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,nszply))
 
-      allocate(partHsrcply(nnx,iys:iye,izs-1:ize+1,Nrp))
-      allocate(partHsrcply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,Nrp))
+      allocate(partHsrcply(nnx,iys:iye,izs-1:ize+1,nszply))
+      allocate(partHsrcply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,nszply))
 
-      allocate(partTEsrcply(nnx,iys:iye,izs-1:ize+1,Nrp))
-      allocate(partTEsrcply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,Nrp))
+      allocate(partTEsrcply(nnx,iys:iye,izs-1:ize+1,nszply))
+      allocate(partTEsrcply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,nszply))
 
       allocate(partcount2(nnx,iys:iye,izs-1:ize+1))
       allocate(partcount2_t(0:nnz+1,iys:iye,mxs:mxe))
@@ -13239,10 +13247,10 @@ c     end if
       real :: lref,Cvv,Cva,Cpv
       !poly-dispersity split
 
-      real :: plctbuf_s(nnz+2,1:iye-iys+2,6*Nrp)
-      real :: plcbbuf_r(nnz+2,1:iye-iys+2,6*Nrp)
-      real :: plcrbuf_s(nnz+2,1:mxe-mxs+1,6*Nrp)
-      real :: plclbuf_r(nnz+2,1:mxe-mxs+1,6*Nrp)
+      real :: plctbuf_s(nnz+2,1:iye-iys+2,6*Nrp*itape/ihst)
+      real :: plcbbuf_r(nnz+2,1:iye-iys+2,6*Nrp*itape/ihst)
+      real :: plcrbuf_s(nnz+2,1:mxe-mxs+1,6*Nrp*itape/ihst)
+      real :: plclbuf_r(nnz+2,1:mxe-mxs+1,6*Nrp*itape/ihst)
 
       g(1:3) = (/0.0, 0.0, part_grav/)
 
@@ -13252,13 +13260,14 @@ c     end if
       partTEsrc_t = 0.0
 
       !poly-disperse split
-      partsrc1ply_t=0.0
-      partsrc2ply_t=0.0
-      partsrc3ply_t=0.0
-      partTsrcply_t=0.0
-      partHsrcply_t = 0.0
-      partTEsrcply_t=0.0
-      partTsrc2_t=0.0
+      call calc_plyloc(it,Nrp,nnz+2,6) 
+      partsrc1ply_t(:,:,:)=0.0
+      partsrc2ply_t(:,:,:)=0.0
+      partsrc3ply_t(:,:,:)=0.0
+      partTsrcply_t(:,:,:)=0.0
+      partHsrcply_t(:,:,:)= 0.0
+      partTEsrcply_t(:,:,:)=0.0
+      partTsrc2_t(:,:,:)=0.0
 
       part => first_particle
       do while (associated(part))
@@ -15301,4 +15310,18 @@ c       if (itlocal==0) itlocal=itape
         tnumgen(indrpcls)=tnumgen(indrpcls)+1.0
         end subroutine count_tnumgen
         
-        
+       subroutine calc_plyloc(itcurrent,Nrp1,nzlen1,nvar1)
+       use pars
+       use particles
+       use fileds
+       include 'mpi.h'
+       implicit none
+       integer,intend(in) :: itcurrent, Nrp1,nzlen,nvar1
+       !which time group of hist profile
+       iply_bat=mod(it,itape)/ihst
+       !where is the beginning batch 
+       iply_beg=(ipl_bat-1)*Nrp1*nzlen1+1
+       plysize=Nrp1*nzlen1
+       iply_end=iply_beg+plysize-1
+       end subroutine
+
