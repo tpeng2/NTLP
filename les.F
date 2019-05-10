@@ -7637,14 +7637,14 @@ c
       sgn = 1.0
       if(iocean .eq. 1 .and. iupwnd .eq. 1) sgn = -1.0
 c
-      do iz=izs,ize
+      do iz=izs,ize  !Loop1: z-loop
 c
       izp2 = iz + 2
       izp1 = iz + 1
       izm1 = iz - 1
 c
-      do iy=iys,iye
-      do ix=1,nnx
+      do iy=iys,iye  !Loop2:y-loop
+      do ix=1,nnx    !Loop3: x-loop[]
          !combined statistics
          stat(iz,1) = stat(iz,1) + (u(ix,iy,iz) - uxym(iz))**2
          stat(iz,2) = stat(iz,2) + (v(ix,iy,iz) - vxym(iz))**2
@@ -7691,7 +7691,7 @@ c
          stat(iz,33) = stat(iz,33) + partTEsrc(ix,iy,iz)
          stat(iz,34) = stat(iz,34) + qstarsum(ix,iy,iz)
          ! poly-dispersity
-       do icls=1,Nrp
+       do icls=1,Nrp    !Loop4: size loop
        iclsg=(icls-1)*pjs
        plstat(iz,iclsg+1)=plstat(iz,iclsg+1)+partcountply(ix,iy,iz,icls)
        plstat(iz,iclsg+2)=plstat(iz,iclsg+2)+partsrc1ply(ix,iy,iz,icls)
@@ -7700,97 +7700,79 @@ c
        plstat(iz,iclsg+5)=plstat(iz,iclsg+5)+partTsrcply(ix,iy,iz,icls)
        plstat(iz,iclsg+6)=plstat(iz,iclsg+6)+partHsrcply(ix,iy,iz,icls)
        plstat(iz,iclsg+7)=plstat(iz,iclsg+7)+partTEsrcply(ix,iy,iz,icls)
-       if(icls==1) then
-c      plstat(iz,iclsg+1)=plstat(iz,iclsg+1)+partcountply(ix,iy,iz,1)
-c      plstat(iz,iclsg+2)=plstat(iz,iclsg+2)+partsrc1(ix,iy,iz)
-c      plstat(iz,iclsg+3)=plstat(iz,iclsg+3)+partsrc1(ix,iy,iz)
-c      plstat(iz,iclsg+4)=plstat(iz,iclsg+4)+partsrc1(ix,iy,iz)
-c      plstat(iz,iclsg+5)=plstat(iz,iclsg+5)+partTsrcply(ix,iy,iz)
-c      plstat(iz,iclsg+6)=plstat(iz,iclsg+6)+partHsrcply(ix,iy,iz)
-c      plstat(iz,iclsg+7)=plstat(iz,iclsg+7)+partTEsrcply(ix,iy,iz)
-       else if (icls==2) then
-       plstat(iz,iclsg+1)=plstat(iz,iclsg+1)+partcount2(ix,iy,iz)
-c      plstat(iz,iclsg+2)=plstat(iz,iclsg+2)+partsrc2(ix,iy,iz)
-c      plstat(iz,iclsg+3)=plstat(iz,iclsg+3)+partsrc2(ix,iy,iz)
-c      plstat(iz,iclsg+4)=plstat(iz,iclsg+4)+partsrc2(ix,iy,iz)
-       plstat(iz,iclsg+5)=plstat(iz,iclsg+5)+partTsrc2(ix,iy,iz)
-c      plstat(iz,iclsg+6)=plstat(iz,iclsg+6)+partHsrc2(ix,iy,iz)
-c      plstat(iz,iclsg+7)=plstat(iz,iclsg+7)+partTEsrc2(ix,iy,iz)
-       end if
-       end do
-      enddo
-      enddo
-      if(mod(it,ihst)==0.and.imndbug.ne.0) then
-              write(*,*) 'partcount,stat(11,:)',stat(:,11)
-      end if
+       end do  !End Loop4: size loop
+      enddo    !End Loop3: x-loop
+      enddo    !End Loop2: y-loop
 c
 c ------------ get scalar resolved fluxes and variances
 c
-      do l=1,nscl
+      do l=1,nscl  !Loop 2a:scalar loop 
          if(iupwnd .ne. 1 .or. iz .eq. nnz) then
-            do iy=iys,iye
-            do ix=1,nnx
+            do iy=iys,iye !Loop 3a1: y-loop
+            do ix=1,nnx   !Loop 4a1: x-loop
                stat(iz,m1+l)=stat(iz,m1+l) +
      +               (w(ix,iy,iz)-wxym(iz))*
      +               0.5*(t(ix,iy,l,iz)-txym(iz,l) +
      +                    t(ix,iy,l,izp1)-txym(izp1,l))
-            enddo
-            enddo
+            enddo    !EndLoop 4a1: x-loop
+            enddo    !End Loop 3a1: y-loop
          else
 c
 c ------------------- monotone fluxes
 c
-           do iy=iys,iye
-           do ix=1,nnx
+           do iy=iys,iye !Loop 3a2: y-loop
+           do ix=1,nnx   !Loop 4a2: x-loop
               stat(iz,m1+l) = stat(iz,m1+l) +
      +    amax1(sgn*w(ix,iy,iz),0.)*(t(ix,iy,l,iz) +
      + rlim(t(ix,iy,l,izp1),t(ix,iy,l,iz),t(ix,iy,l,izm1))) +
      +    amin1(sgn*w(ix,iy,iz),0.)*(t(ix,iy,l,izp1) +
      + rlim(t(ix,iy,l,iz),t(ix,iy,l,izp1),t(ix,iy,l,izp2)))
-           enddo
-           enddo
+           enddo          !End Loop 4a2: x-loop
+           enddo          !End Loop 3a2: y-loop
          endif
+
          stat(iz,m1+l)= sgn*stat(iz,m1+l)
 c
 c ------------ get horizontal scalar resolved fluxes 
 c
-         do iy=iys,iye
-         do ix=1,nnx
+         do iy=iys,iye  !Loop 3a3: y-loop
+         do ix=1,nnx    !Loop 4a3: x-loop
             stat(iz,m2+l) = stat(iz,m2+l)+
      +               (u(ix,iy,iz)-uxym(iz))*
      +               (t(ix,iy,l,iz)-txym(iz,l)) 
             stat(iz,m3+l) = stat(iz,m3+l)+
      +               (v(ix,iy,iz)-vxym(iz))*
      +               (t(ix,iy,l,iz)-txym(iz,l)) 
-         enddo
-         enddo
+         enddo         !End Loop 4a3
+         enddo         !End Loop 3a3
 c
 c ------------------- scalar variances & higher moments
 c
-         do iy=iys,iye
-         do ix=1,nnx
+         do iy=iys,iye  !Loop 3a4
+         do ix=1,nnx    !Loop 4a4
             stat(iz,m4+l) = stat(iz,m4+l) + 
      +                (t(ix,iy,l,iz) - txym(iz,l))**2
             stat(iz,m5+l) = stat(iz,m5+l) + 
      +                (t(ix,iy,l,iz) - txym(iz,l))**3
-         enddo
-         enddo
+         enddo          !ENd Loop 4a4
+         enddo          !End Loop 3a4
 c
 c ------ end scalar loop
 c
-      enddo
+      enddo            !End loop 2a
 c
 c ------ end z loop
 c
-      enddo
+      enddo            !End loop 1
 c
 c -------- add partial sums and send it to all
 c
       call mpi_sum_z(stat(1,1),i_root,myid,nnz*nstat,1)
+      call mpi_sum_z(plstat(1,1),i_root,myid,nnz*nplstat,1)
 c
 c ------ fill arrays for printout and constant file
 c
-      do iz=1,nnz
+      do iz=1,nnz  
 c 
       ups(iz)    = stat(iz,1)*fnxy
       vps(iz)    = stat(iz,2)*fnxy
@@ -7833,33 +7815,46 @@ c
       TEpsrc(iz) = stat(iz,33)*fnxy
       qstarm(iz) = stat(iz,34)*fnxy
 
-      !poly-dispersity
-      do icls=1,Nrp
-      iclsg=(icls-1)*pjs
-      pcount(iz,icls)=plstat(iz,iclsg+1)
-      pm1src(iz,icls) =plstat(iz,iclsg+2)
-      pm2src(iz,icls) =plstat(iz,iclsg+3)
-      pm3src(iz,icls) =plstat(iz,iclsg+4)
-      pTpsrc(iz,icls)=plstat(iz,iclsg+5)
-      pHpsrc(iz,icls)=plstat(iz,iclsg+6)
-      pTEpsrc(iz,icls)=plstat(iz,iclsg+7)
-      end do
-
 c
 c ------------ get scalar resolved fluxes and variances
 c
-      do l=1,nscl
-         wtle(iz,l)   = stat(iz,m1+l)*fnxy
-         utle(iz,l)   = stat(iz,m2+l)*fnxy
-         vtle(iz,l)   = stat(iz,m3+l)*fnxy
-         tps(iz,l)    = stat(iz,m4+l)*fnxy
-         tcube(iz,l)  = stat(iz,m5+l)*fnxy
-         wt_tot(iz,l) = wtle(iz,l) + wtsb(iz,l)
-      enddo
-      enddo
+          do l=1,nscl  
+             wtle(iz,l)   = stat(iz,m1+l)*fnxy
+             utle(iz,l)   = stat(iz,m2+l)*fnxy
+             vtle(iz,l)   = stat(iz,m3+l)*fnxy
+             tps(iz,l)    = stat(iz,m4+l)*fnxy
+             tcube(iz,l)  = stat(iz,m5+l)*fnxy
+             wt_tot(iz,l) = wtle(iz,l) + wtsb(iz,l)
+          enddo  !scalar
+      enddo  !z-loop
+      !poly-dispersity
+      do icls=1,Nrp  !size loop
+          do iz=1,nnz    !z-loop
+          iclsg=(icls-1)*pjs
+          pcount(iz,icls)=plstat(iz,iclsg+1)
+          pm1src(iz,icls) =plstat(iz,iclsg+2)*fnxy
+          pm2src(iz,icls) =plstat(iz,iclsg+3)*fnxy
+          pm3src(iz,icls) =plstat(iz,iclsg+4)*fnxy
+          pTpsrc(iz,icls)=plstat(iz,iclsg+5)*fnxy
+          pHpsrc(iz,icls)=plstat(iz,iclsg+6)*fnxy
+          pTEpsrc(iz,icls)=plstat(iz,iclsg+7)*fnxy
+          end do
+      end do
+
+      if(mod(it,ihst)==0.and.imndbug==3) then
+      write(*,*)'zconc:myid,zconc',myid,iz,zconc
+      write(*,*)'Tpmean:myid,Tpmean',myid,iz,Tpmean
+      write(*,*)'m1src:myid,m1src',myid,iz,m1src
+      do icls=1,Nrp
+      write(*,*)'pcount:myid,icls,pcount',myid,icls,pcount(:,icls)
+      write(*,*)'pm1src:myid,icls,pm1src',myid,icls,pm1src(:,icls)
+      end do
+      end if
+
 c
       return
-      end
+      end subroutine 
+
       subroutine tke_budget
 c
 c -------- get terms in resolved scale tke budget
@@ -8376,6 +8371,7 @@ c
 
  
       subroutine write_prof(nhisp1,krec1,num,f)
+      use pars
       implicit none
       integer,intent(in) :: num,nhisp1,krec1
       integer :: i
@@ -8388,6 +8384,10 @@ c
          f32(i) = f(i)
       enddo
 c
+      if(imndbug==3.or.mod(it,itape)==0) then
+      write(*,*) 'hispid',nhisp1,'profile passed to write',f32 !test
+      end if
+ 
       write(nhisp1,err=999,rec=krec1) (f32(i),i=1,num)
 c
       return
@@ -8493,7 +8493,7 @@ c
          f32(i) = f(i)
       enddo
 c
-      if(imndbug==1.or.mod(it,itape)==0) then
+      if(imndbug==3.or.mod(it,itape)==0) then
       write(*,*) 'plhispid',plhispid,'profile passed to write',f32 !test
       end if
       write(plhispid,err=979,rec=plkrec1) (f32(i),i=1,num)
@@ -10981,6 +10981,10 @@ c         pcount = 0
       call particle_exchange
       call particle_bcs_periodic
       call particle_coupling_update
+      if(mod(it,itape)==0.and.imndbug==3) then
+        write(*,*) 'myid,nnx,nnz,mxe,mx_e',myid,nnx,nnz,mxe,mxe
+        write(*,*) 'myid,mxs,mx_s',myid,mxs,mx_s
+      end if
       call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,1),
      +                partsrc(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
@@ -11098,6 +11102,16 @@ c         pcount = 0
       if(myid==0) write(*,*)'before transfering particle stats'
       ! for poly-dispersity !itterate on icls
       if (Nrp<=35) then
+      if(imndbug==3) then
+        write(*,*) 'size partcountply_t (:,:,:,icls)=',
+     +size(partcountply_t(0:nnz+1,iys:iye,mxs:mxe,icls))
+        write(*,*) 'size partcount_t (:,:,:,icls)=',
+     +size(partcount_t(0:nnz+1,iys:iye,mxs:mxe))
+        write(*,*) 'size partcountply (:,:,:,icls)=',
+     +size(partcountply_t(1:nnx,iys:iye,izs-1:ize+1,icls))
+        write(*,*) 'size partcount (:,:,:,icls)=',
+     +size(partcount_t(1:nnx,iys:iye,izs-1:ize+1))
+      end if
       do icls=1,Nrp
       call ztox_trans(partcountply_t(0:nnz+1,iys:iye,mxs:mxe,icls),
      +       partcountply(1:nnx,iys:iye,izs-1:ize+1,icls),nnx,nnz,mxs,
@@ -11153,20 +11167,20 @@ c    +                ncpu_s,numprocs)
 
       !test
       if(myid==0.and.istage==3) then
-       write(*,*)it,'cpu0 sum(partcount)',sum(partcount)
-       write(*,*)it,'cpu0 sum(partcount_t)',sum(partcount_t)
-       write(*,*)it,'cpu0 sum(partcountply)',sum(partcountply)
-       write(*,*)it,'cpu0 sum(partcountply_t)',sum(partcountply_t)
-       write(*,*)it,'cpu0 sum(partcount2)',sum(partcount2)
-       write(*,*)it,'cpu0 sum(partcount2_t)',sum(partcount2_t)
+       write(*,*)'it',it,'cpu0 sum(partcount)',sum(partcount)
+       write(*,*)'it',it,'cpu0 sum(partcount_t)',sum(partcount_t)
+       write(*,*)'it',it,'cpu0 sum(partcountply)',sum(partcountply)
+       write(*,*)'it',it,'cpu0 sum(partcountply_t)',sum(partcountply_t)
+c      write(*,*)it,'cpu0 sum(partcount2)',sum(partcount2)
+c      write(*,*)it,'cpu0 sum(partcount2_t)',sum(partcount2_t)
       end if
       if(myid==1.and.istage==3) then
-       write(*,*) 'it',it,'cpu1 sum(partcount)',sum(partcount)
-       write(*,*) 'it',it,'cpu1 sum(partcount_t)',sum(partcount_t)
-       write(*,*) 'it',it,'cpu1 sum(partcountply)',sum(partcountply)
-       write(*,*) 'it',it,'cpu1 sum(partcountply_t)',sum(partcountply_t)
-       write(*,*) 'it',it,'cpu1 sum(partcount2)',sum(partcount2)
-       write(*,*) 'it',it,'cpu1 sum(partcount2_t)',sum(partcount2_t)
+       write(*,*)'it',it,'cpu1 sum(partcount)',sum(partcount)
+       write(*,*)'it',it,'cpu1 sum(partcount_t)',sum(partcount_t)
+       write(*,*)'it',it,'cpu1 sum(partcountply)',sum(partcountply)
+       write(*,*)'it',it,'cpu1 sum(partcountply_t)',sum(partcountply_t)
+c      write(*,*) 'it',it,'cpu1 sum(partcount2)',sum(partcount2)
+c      write(*,*) 'it',it,'cpu1 sum(partcount2_t)',sum(partcount2_t)
       end if
       !t_s = mpi_wtime
       !Get particle count:
@@ -11470,7 +11484,7 @@ c       part%radius=part%rp_init
      +       mpi_comm_world,ierr)
       ! debug mode: categorized reintro tnumpart
       ! unnecessary for normal runs
-      if (imndbug.ne.0) then
+      if (imndbug==1) then
       call mpi_allreduce(Fnum_reintro(itlocal,:),Ftmp_reintro(itlocal,:)
      +,Nrp,mpi_integer,mpi_sum,mpi_comm_world,ierr)   !tmp is the receiver
       if (myid==0) then
