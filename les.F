@@ -8,9 +8,8 @@ c     ----------------------------------------------------------------------
       integer :: imndbug
       ! In params.in 
       integer :: 
-     +     iti,itmax, imean, ihst,itape
+     +     iti,itmax, imean, ihst,itape,
      +     itstr, it_his, it_viz, i_viz   !change u.le if iti >0
-      integer::iply_bat,iply_beg,iply_end,plsize !poly-disp. bat size, beg loc
       ! In params. in
       integer ::
      +     noalis, ismlt, ifree, isfc, iradup,
@@ -171,11 +170,6 @@ c     ----------------------------------------------------------------------
       real,allocatable :: partTsrcply(:,:,:,:), partTsrcply_t(:,:,:,:)
       real,allocatable :: partHsrcply(:,:,:,:), partHsrcply_t(:,:,:,:)
       real,allocatable :: partTEsrcply(:,:,:,:),partTEsrcply_t(:,:,:,:)
-      real,allocatable :: partTEsrc2(:,:,:),   partTEsrc2_t(:,:,:)
-      real,allocatable :: partHsrc2(:,:,:),    partHsrc2_t(:,:,:)
-      real,allocatable :: partTsrc2(:,:,:),    partTsrc2_t(:,:,:)
-      real,allocatable :: partsrc2(:,:,:),     partsrc2_t(:,:,:)
-      real,allocatable :: partcount2(:,:,:),     partcount2_t(:,:,:)
       ! counting particle
       integer :: particletype,pad_diff
       integer :: numpart,tnumpart,ngidx
@@ -668,18 +662,32 @@ c
         allocate(plc_s%pTEpsrc(maxnz,Nrp));   plncpvar=plncpvar+1
              !Poly-dispersed type
              plisize=0
+        if(myid==0) write(*,*) 'plisize=',plisize
              pcount  => plc_s%pcount;  plisize=plisize+size(pcount)
+        if(myid==0) write(*,*) 'plisize=',plisize
              pm1src  => plc_s%pm1src;  plisize=plisize+size(pm1src)
+        if(myid==0) write(*,*) 'plisize=',plisize
              pm2src  => plc_s%pm2src;  plisize=plisize+size(pm2src)
+        if(myid==0) write(*,*) 'plisize=',plisize
              pm3src  => plc_s%pm3src;  plisize=plisize+size(pm3src)
+        if(myid==0) write(*,*) 'plisize=',plisize
              pTpsrc  => plc_s%pTpsrc;  plisize=plisize+size(pTpsrc)
+        if(myid==0) write(*,*) 'plisize=',plisize
              pHpsrc  => plc_s%pHpsrc;  plisize=plisize+size(pHpsrc)
+        if(myid==0) write(*,*) 'plisize=',plisize
              pTEpsrc => plc_s%pTEpsrc; plisize=plisize+size(pTEpsrc)
+        if(myid==0) write(*,*) 'plisize=',plisize
         if(myid==0) write(*,*) 'size(pcount)',size(pcount)
         if(myid==0) write(*,*) 'pcount',pcount
         if(myid==0) write(*,*) 'Nrp',Nrp
         if(myid==0) write(*,*) 'size(plc_s%pcount)',size(plc_s%pcount)
         if(myid==0) write(*,*) 'plc_s%pcount',plc_s%pcount
+        if(myid==0) write(*,*) 'size(plc_s%pm1src)',size(plc_s%pm1src)
+        if(myid==0) write(*,*) 'size(plc_s%pm2src)',size(plc_s%pm2src)
+        if(myid==0) write(*,*) 'size(plc_s%pm3src)',size(plc_s%pm3src)
+        if(myid==0) write(*,*) 'size(plc_s%pTpsrc)',size(plc_s%pTpsrc)
+        if(myid==0) write(*,*) 'size(plc_s%pHpsrc)',size(plc_s%pHpsrc)
+        if(myid==0) write(*,*) 'size(plc_s%pTEpsrc)',size(plc_s%pTEpsrc)
          return
          end subroutine fill_cs
       end module con_stats
@@ -6415,17 +6423,11 @@ c
       qstarsum_t = 0.0 
 
       !poly-dispersity
-      call calc_plyloc(it,Nrp,nnz+2,6) 
       partcountply = 0.0
       partcountply_t = 0.0
-      partcount2 = 0.0
-      partcount2_t = 0.0
- 
+
       partTsrcply = 0.0
       partTsrcply_t = 0.0
-      partTsrc2 = 0.0
-      partTsrc2_t = 0.0
-
 c ------------ note set nmatch in sr. iso so that
 c              it is compatible with conditions here
 c
@@ -7553,7 +7555,8 @@ c     real plstat(1:nnz,pjs*nplstat) !partcountply, partcount2, 4/23/2019 test
       ns=5
       nstat=js+ns*nscl
       pjs=plnsplit+plncpvar
-      nplstat=pjs*Nrp*itape/ihst !store everything in one batch
+      nplstat=pjs*Nrp
+      if(myid==0) write(*,*) 'poly vars: pjs',pjs,'nplstat',nplstat
       if(myid==0) write(*,*) 'size plstat=',nnz,'x',nplstat
       allocate(stat(nnz,nstat),plstat(nnz,nplstat))
 c
@@ -7831,7 +7834,7 @@ c
       do icls=1,Nrp  !size loop
           do iz=1,nnz    !z-loop
           iclsg=(icls-1)*pjs
-          pcount(iz,icls)=plstat(iz,iclsg+1)
+          pcount(iz,icls)=plstat(iz,iclsg+1)/xl/yl/dzw(iz)
           pm1src(iz,icls) =plstat(iz,iclsg+2)*fnxy
           pm2src(iz,icls) =plstat(iz,iclsg+3)*fnxy
           pm3src(iz,icls) =plstat(iz,iclsg+4)*fnxy
@@ -7841,7 +7844,7 @@ c
           end do
       end do
 
-      if(mod(it,ihst)==0.and.imndbug==3) then
+      if(mod(it,ihst)==0.and.imndbug==3.and.myid==1) then
       write(*,*)'zconc:myid,zconc',myid,iz,zconc
       write(*,*)'Tpmean:myid,Tpmean',myid,iz,Tpmean
       write(*,*)'m1src:myid,m1src',myid,iz,m1src
@@ -7849,6 +7852,7 @@ c
       write(*,*)'pcount:myid,icls,pcount',myid,icls,pcount(:,icls)
       write(*,*)'pm1src:myid,icls,pm1src',myid,icls,pm1src(:,icls)
       end do
+      write(*,*) 'zconc: myid,zconc',myid,zconc
       end if
 
 c
@@ -8461,42 +8465,67 @@ c
 
       ! what to write for time series
       write(pnhis1,6070) time,maxval(partcountply(1:nnx,iys:iye,1,1)),
-     +maxval(partcount2(1:nnx,iys:iye,1)) 
+     +maxval(partcountply(1:nnx,iys:iye,5,1)) 
  6070 format(3e17.8) 
       if (myid==0) then
         write(*,*)'iloc',iloc,'test poly-hist',time,
      +maxval(partcountply(1:nnx,iys:iye,1,1)),
-     +maxval(partcount2(1:nnx,iys:iye,1))
-        write(*,*) 'test plkrec',plkrec,'plisize',plisize
+     +maxval(partcountply(1:nnx,iys:iye,5,1))
+        write(*,*) 'test plkrec (#hist file)',plkrec,'plisize',plisize
       end if
 c
 c -------------- write profile information
 c
-      call write_polyprof(pnhisp,plkrec,plisize,plc_s%pcount)
+c     call write_polyprof(pnhisp,plkrec,plisize,plc_s%pcount)
+      call write_polyprof(pnhisp,plkrec,Nrp*nnz,pcount,pm1src,pm1src,
+     +pm2src,pm3src,pTpsrc,pHpsrc,pTEpsrc)
 c
       return
       end subroutine
 
-      subroutine write_polyprof(plhispid,plkrec1,num,f)
+      subroutine write_polyprof(plhispid,plkrec1,num,f1,f2,f3,f4,
+     +f5,f6,f7)
       use pars
       use particles
       implicit none
       integer,intent(in) :: plhispid,plkrec1
       integer,intent(in) :: num
       integer :: i
-      real f(num)
-      real*4 f32(num)
+      real f1(num),f2(num),f3(num),f4(num),f5(num),f6(num),f7(num)
+      real*4 f132(num),f232(num),f332(num)
+      real*4 f432(num),f532(num),f632(num)
+      real*4 f732(num)
 c
 c -------------- build special 32 bit arrays for profiles
 c
       do i=1,num
-         f32(i) = f(i)
+         f132(i) = f1(i)
+         f232(i) = f2(i)
+         f332(i) = f3(i)
+         f432(i) = f4(i)
+         f532(i) = f5(i)
+         f632(i) = f6(i)
+         f732(i) = f7(i)
       enddo
 c
-      if(imndbug==3.or.mod(it,itape)==0) then
-      write(*,*) 'plhispid',plhispid,'profile passed to write',f32 !test
+      if(imndbug==3.or.mod(it,itape)==0.and.myid==0) then
+      write(*,*) 'plhispid',plhispid,'profile1 passed to write',f132 !test
+      write(*,*) 'plhispid',plhispid,'profile2 passed to write',f232 !test
+      write(*,*) 'plhispid',plhispid,'profile3 passed to write',f332 !test
+      write(*,*) 'plhispid',plhispid,'profile4 passed to write',f432 !test
+      write(*,*) 'plhispid',plhispid,'profile5 passed to write',f532 !test
+      write(*,*) 'plhispid',plhispid,'profile6 passed to write',f632 !test
+      write(*,*) 'plhispid',plhispid,'profile7 passed to write',f732 !test
       end if
-      write(plhispid,err=979,rec=plkrec1) (f32(i),i=1,num)
+      write(plhispid,err=979,rec=plkrec1)f132,f232,f332,f432,f532,
+     +f632,f732
+c     write(plhispid,err=979,rec=plkrec1) (f132(i),i=1,num),
+c     +(f232(i),i=1,num),
+c     +(f332(i),i=1,num),
+c     +(f432(i),i=1,num),
+c     +(f532(i),i=1,num),
+c     +(f632(i),i=1,num),
+c     +(f732(i),i=1,num)
       !test
 c
       return
@@ -8508,6 +8537,38 @@ c --------------- errors
      +       ' num = ',i8, 'plkrec = ',i6)
       stop
       end subroutine
+
+c     subroutine write_polyprof(plhispid,plkrec1,num,f)
+c     use pars
+c     use particles
+c     implicit none
+c     integer,intent(in) :: plhispid,plkrec1
+c     integer,intent(in) :: num
+c     integer :: i
+c     real f(num)
+c     real*4 f32(num)
+c
+c -------------- build special 32 bit arrays for profiles
+c
+c     do i=1,num
+c        f32(i) = f(i)
+c     enddo
+c
+c     if(imndbug==3.or.mod(it,itape)==0.and.myid==0) then
+c     write(*,*) 'plhispid',plhispid,'profile passed to write',f32 !test
+c     end if
+c     write(plhispid,err=979,rec=plkrec1) (f32(i),i=1,num)
+c     !test
+c
+c     return
+c --------------- errors
+c 979 continue
+c     write(6,9070) num,plkrec1
+c9070 format(' 9070, trouble in ',
+c    +       'SR. save_polyprof cannot write profile data ',/,
+c    +       ' num = ',i8, 'plkrec = ',i6)
+c     stop
+c     end subroutine
 
       subroutine close_polyhis
 c
@@ -8822,37 +8883,28 @@ c     +         Text(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3))
       allocate(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe)) 
 
       ! poly-dispersity
-      ! to solve communication waste, now use larger memory
-      ! but save time, one batch of the size stored is
-      ! nszply=int(Nrp*itape/ihst)
-      ! note: no implicit none in this subroutine
-      nszply=int(Nrp*itape/ihst) 
-      !call calc_plyloc(it,Nrp,nnz+2,6) 
-      allocate(partcountply(nnx,iys:iye,izs-1:ize+1,nszply))
-      allocate(partcountply_t(0:nnz+1,iys:iye,mxs:mxe,nszply))
+      
+      allocate(partcountply(nnx,iys:iye,izs-1:ize+1,Nrp))
+      allocate(partcountply_t(0:nnz+1,iys:iye,mxs:mxe,Nrp))
 
-      allocate(partsrc1ply(nnx,iys:iye,izs-1:ize+1,nszply))
-      allocate(partsrc1ply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,nszply))
+      allocate(partsrc1ply(nnx,iys:iye,izs-1:ize+1,Nrp))
+      allocate(partsrc1ply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,Nrp))
 
-      allocate(partsrc2ply(nnx,iys:iye,izs-1:ize+1,nszply))
-      allocate(partsrc2ply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,nszply))
+      allocate(partsrc2ply(nnx,iys:iye,izs-1:ize+1,Nrp))
+      allocate(partsrc2ply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,Nrp))
 
-      allocate(partsrc3ply(nnx,iys:iye,izs-1:ize+1,nszply))
-      allocate(partsrc3ply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,nszply))
+      allocate(partsrc3ply(nnx,iys:iye,izs-1:ize+1,Nrp))
+      allocate(partsrc3ply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,Nrp))
 
-      allocate(partTsrcply(nnx,iys:iye,izs-1:ize+1,nszply))
-      allocate(partTsrcply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,nszply))
+      allocate(partTsrcply(nnx,iys:iye,izs-1:ize+1,Nrp))
+      allocate(partTsrcply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,Nrp))
 
-      allocate(partHsrcply(nnx,iys:iye,izs-1:ize+1,nszply))
-      allocate(partHsrcply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,nszply))
+      allocate(partHsrcply(nnx,iys:iye,izs-1:ize+1,Nrp))
+      allocate(partHsrcply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,Nrp))
 
-      allocate(partTEsrcply(nnx,iys:iye,izs-1:ize+1,nszply))
-      allocate(partTEsrcply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,nszply))
+      allocate(partTEsrcply(nnx,iys:iye,izs-1:ize+1,Nrp))
+      allocate(partTEsrcply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,Nrp))
 
-      allocate(partcount2(nnx,iys:iye,izs-1:ize+1))
-      allocate(partcount2_t(0:nnz+1,iys:iye,mxs:mxe))
-      allocate(partTsrc2(nnx,iys:iye,izs-1:ize+1))
-      allocate(partTsrc2_t(0:nnz+1,iys:iye+1,mxs:mxe+1))
 c ------------- allocate space for boundary condition arrays
 c               on top and bottom of domain
 c
@@ -10816,7 +10868,6 @@ c
 
       ! poly-dispersity related
       partcountply_t=0.0
-      partcount2_t=0.0
 
       !t_s = mpi_wtime()
 
@@ -11013,7 +11064,7 @@ c         pcount = 0
 
 
       !Try only calling these when the history data is being written:
-      if(mtrans  .and. istage .eq. 3) then
+      if(mtrans .and. istage .eq. 3) then
       call ztox_trans(upwp_t(0:nnz+1,iys:iye,mxs:mxe),
      +                upwp(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
@@ -11142,46 +11193,23 @@ c         pcount = 0
      +       mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +       ncpu_s,numprocs)
       end do  
-      end if
-      if(myid==0) write(*,*)'after transfering particle stats'
-c     call ztox_trans(partcountply_t(0:nnz+1,iys:iye,mxs:mxe),
-c    +                partcountply(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-c    +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-c    +                ncpu_s,numprocs)
-
-      call ztox_trans(partcount2_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                partcount2(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-
-c     call ztox_trans(partTsrcply_t(0:nnz+1,iys:iye,mxs:mxe),
-c    +                partTsrcply(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-c    +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-c    +                ncpu_s,numprocs)
-
-      call ztox_trans(partTsrc2_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                partTsrc2(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-      end if
-
+      end if !if Nrp<=35
+      endif  !if mtrans.and.istage==3
       !test
-      if(myid==0.and.istage==3) then
+      if(imndbug.ne.0.and.myid==0.and.istage==3) then
        write(*,*)'it',it,'cpu0 sum(partcount)',sum(partcount)
        write(*,*)'it',it,'cpu0 sum(partcount_t)',sum(partcount_t)
        write(*,*)'it',it,'cpu0 sum(partcountply)',sum(partcountply)
        write(*,*)'it',it,'cpu0 sum(partcountply_t)',sum(partcountply_t)
-c      write(*,*)it,'cpu0 sum(partcount2)',sum(partcount2)
-c      write(*,*)it,'cpu0 sum(partcount2_t)',sum(partcount2_t)
       end if
-      if(myid==1.and.istage==3) then
+
+      if(imndbug.ne.0.and.myid==1.and.istage==3) then
        write(*,*)'it',it,'cpu1 sum(partcount)',sum(partcount)
        write(*,*)'it',it,'cpu1 sum(partcount_t)',sum(partcount_t)
        write(*,*)'it',it,'cpu1 sum(partcountply)',sum(partcountply)
        write(*,*)'it',it,'cpu1 sum(partcountply_t)',sum(partcountply_t)
-c      write(*,*) 'it',it,'cpu1 sum(partcount2)',sum(partcount2)
-c      write(*,*) 'it',it,'cpu1 sum(partcount2_t)',sum(partcount2_t)
       end if
+
       !t_s = mpi_wtime
       !Get particle count:
       numpart = 0
@@ -12670,8 +12698,6 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       partHsrcply_t = 0.0
       partTEsrcply = 0.0
       partTEsrcply_t = 0.0
-      partTsrc2 = 0.0
-      partTsrc2_t = 0.0
       !calculate particle generated in each class
       call mpi_reduce(tnumgen(:),sumbuf_tnumgen(:),Nrp,
      +mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
@@ -13183,7 +13209,11 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
       !and computes quantities needed to get particle statistics
 
       partcount_t(kpt,jpt,ipt) = partcount_t(kpt,jpt,ipt) + 1.0
-
+      if(imndbug==3.and.mod(it,ihst)==0) then
+      if(kpt>126.and.myid<2) then
+      write(*,*) 'myid,partcountply_t',myid,partcountply(kpt,jpt,ipt,:)
+      end if
+      end if
       !testing
       if(imndbug.ne.0) then
       if(myid==0.and.part%rpind==1.and.mod(it,ihst)==0) then
@@ -13197,15 +13227,11 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
 
       partcountply_t(kpt,jpt,ipt,part%rpind)=
      + partcountply_t(kpt,jpt,ipt,part%rpind)+1.0
-c     if (part%rpind==1) then
-c       partcountply_t(kpt,jpt,ipt) = partcountply_t(kpt,jpt,ipt) + 1.0
-c       !test
-c       if (myid==0.and.mod(it,ihst)==0.and.imndbug.ne.0) then
-c       write(*,*) 'it',it,'sum(partcountply_t)@cpu0',sum(partcountply_t)
-c       end if
-c     else if (part%rpind==2) then
-c       partcount2_t(kpt,jpt,ipt) = partcount2_t(kpt,jpt,ipt) + 1.0
-c     end if 
+      if(imndbug==3.and.mod(it,ihst)==0) then
+      if(kpt>120) then
+      write(*,*) 'myid,partcountply_t',myid,partcountply(kpt,jpt,ipt,:)
+      end if
+      end if
 
       !Get su mean, mean-squared of particle velocities at each level
       upwp_t(kpt,jpt,ipt) = upwp_t(kpt,jpt,ipt) + part%vp(1)*part%vp(3)
@@ -13261,10 +13287,10 @@ c     end if
       real :: lref,Cvv,Cva,Cpv
       !poly-dispersity split
 
-      real :: plctbuf_s(nnz+2,1:iye-iys+2,6*Nrp*itape/ihst)
-      real :: plcbbuf_r(nnz+2,1:iye-iys+2,6*Nrp*itape/ihst)
-      real :: plcrbuf_s(nnz+2,1:mxe-mxs+1,6*Nrp*itape/ihst)
-      real :: plclbuf_r(nnz+2,1:mxe-mxs+1,6*Nrp*itape/ihst)
+      real :: plctbuf_s(nnz+2,1:iye-iys+2,6*Nrp)
+      real :: plcbbuf_r(nnz+2,1:iye-iys+2,6*Nrp)
+      real :: plcrbuf_s(nnz+2,1:mxe-mxs+1,6*Nrp)
+      real :: plclbuf_r(nnz+2,1:mxe-mxs+1,6*Nrp)
 
       g(1:3) = (/0.0, 0.0, part_grav/)
 
@@ -13274,14 +13300,12 @@ c     end if
       partTEsrc_t = 0.0
 
       !poly-disperse split
-      call calc_plyloc(it,Nrp,nnz+2,6) 
-      partsrc1ply_t(:,:,:)=0.0
-      partsrc2ply_t(:,:,:)=0.0
-      partsrc3ply_t(:,:,:)=0.0
-      partTsrcply_t(:,:,:)=0.0
-      partHsrcply_t(:,:,:)= 0.0
-      partTEsrcply_t(:,:,:)=0.0
-      partTsrc2_t(:,:,:)=0.0
+      partsrc1ply_t=0.0
+      partsrc2ply_t=0.0
+      partsrc3ply_t=0.0
+      partTsrcply_t=0.0
+      partHsrcply_t = 0.0
+      partTEsrcply_t=0.0
 
       part => first_particle
       do while (associated(part))
@@ -13410,18 +13434,6 @@ c     end if
      +                  part%radrhs*Cpv/Cpa*part%Tp*wtt/dV -
      +         rhow/rhoa*pi2*2*part%radius**2*
      +                  part%radrhs*Cpv/Cpa*part%Tf*wtt/dV
-
-      if (part%rpind.eq.1) then
-c     partTsrcply_t(iz,iy,ix) =
-c    +     partTsrcply_t(iz,iy,ix) +
-c    +     (part%Tprhs_s*6.0*rhow/rhop/CpaCpp/taup_i*
-c    +     (pi2/2.0)*part%radius*nuf)*wtt/dV
-      else if (part%rpind.eq.2) then
-      partTsrc2_t(iz,iy,ix) =
-     +     partTsrc2_t(iz,iy,ix) +
-     +     (part%Tprhs_s*6.0*rhow/rhop/CpaCpp/taup_i*
-     +     (pi2/2.0)*part%radius*nuf)*wtt/dV
-      end if
 
 
       ! endif
@@ -15324,18 +15336,4 @@ c       if (itlocal==0) itlocal=itape
         tnumgen(indrpcls)=tnumgen(indrpcls)+1.0
         end subroutine count_tnumgen
         
-       subroutine calc_plyloc(itcurrent,Nrp1,nzlen1,nvar1)
-       use pars
-       use particles
-       use fileds
-       include 'mpi.h'
-       implicit none
-       integer,intend(in) :: itcurrent, Nrp1,nzlen,nvar1
-       !which time group of hist profile
-       iply_bat=mod(it,itape)/ihst
-       !where is the beginning batch 
-       iply_beg=(ipl_bat-1)*Nrp1*nzlen1+1
-       plysize=Nrp1*nzlen1
-       iply_end=iply_beg+plysize-1
-       end subroutine
-
+        
