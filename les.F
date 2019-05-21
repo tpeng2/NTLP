@@ -164,6 +164,8 @@ c     ----------------------------------------------------------------------
 
       ! poly-dispersity, flux splitting, experiment for 2 sizes
       real,allocatable :: partcountply(:,:,:,:),partcountply_t(:,:,:,:)
+      real,allocatable :: Tpsumply(:,:,:,:),Tpsumply_t(:,:,:,:)
+      real,allocatable :: radsumply(:,:,:,:),radsumply_t(:,:,:,:)
       real,allocatable :: partsrc1ply(:,:,:,:), partsrc1ply_t(:,:,:,:)
       real,allocatable :: partsrc2ply(:,:,:,:), partsrc2ply_t(:,:,:,:)
       real,allocatable :: partsrc3ply(:,:,:,:), partsrc3ply_t(:,:,:,:)
@@ -523,12 +525,12 @@ c    + 		 Tpsrc_cls(maxnz,Nrp),!Tianze  10/29/2018 add sizeclass
         !poly-dispersity profiles
        type polycon_s
         sequence
-c       real ::  pcount(maxnz,Nrp),
+c       real ::  pcount(maxnz,Nrp),pTpmean(maxnz,Nrp),prpmean(maxnz,Nrp),
 c    +           pm1src(maxnz,Nrp),pm2src(maxnz,Nrp),pm3src(maxnz,Nrp),
 c    +           pTpsrc(maxnz,Nrp),
 c    +           pHpsrc(maxnz,Nrp),
 c    +           pTEpsrc(maxnz,Nrp)
-        real,allocatable ::  pcount(:,:),
+        real,allocatable ::  pcount(:,:),pTpmean(:,:),prpmean(:,:),
      +           pm1src(:,:),pm2src(:,:),pm3src(:,:),
      +           pTpsrc(:,:),
      +           pHpsrc(:,:),
@@ -536,7 +538,7 @@ c    +           pTEpsrc(maxnz,Nrp)
         end type polycon_s
        !=========================
         type(polycon_s), target:: plc_s !add an alias
-        real,pointer ::  pcount(:,:),
+        real,pointer ::  pcount(:,:),pTpmean(:,:),prpmean(:,:),
      +           pm1src(:,:),pm2src(:,:),pm3src(:,:),
      +           pTpsrc(:,:),pHpsrc(:,:),pTEpsrc(:,:)
         !=======
@@ -654,6 +656,8 @@ c
              
 
         allocate(plc_s%pcount(maxnz,Nrp));   plnsplit=plnsplit+1
+        allocate(plc_s%pTpmean(maxnz,Nrp));   plnsplit=plnsplit+1
+        allocate(plc_s%prpmean(maxnz,Nrp));   plnsplit=plnsplit+1
         allocate(plc_s%pm1src(maxnz,Nrp));   plncpvar=plncpvar+1
         allocate(plc_s%pm2src(maxnz,Nrp));   plncpvar=plncpvar+1
         allocate(plc_s%pm3src(maxnz,Nrp));   plncpvar=plncpvar+1
@@ -664,6 +668,10 @@ c
              plisize=0
         if(myid==0) write(*,*) 'plisize=',plisize
              pcount  => plc_s%pcount;  plisize=plisize+size(pcount)
+        if(myid==0) write(*,*) 'plisize=',plisize
+             pTpmean  => plc_s%pTpmean;  plisize=plisize+size(pTpmean)
+        if(myid==0) write(*,*) 'plisize=',plisize
+             prpmean  => plc_s%prpmean;  plisize=plisize+size(prpmean)
         if(myid==0) write(*,*) 'plisize=',plisize
              pm1src  => plc_s%pm1src;  plisize=plisize+size(pm1src)
         if(myid==0) write(*,*) 'plisize=',plisize
@@ -682,6 +690,8 @@ c
         if(myid==0) write(*,*) 'Nrp',Nrp
         if(myid==0) write(*,*) 'size(plc_s%pcount)',size(plc_s%pcount)
         if(myid==0) write(*,*) 'plc_s%pcount',plc_s%pcount
+        if(myid==0) write(*,*) 'size(plc_s%pTpmean)',size(plc_s%pTpmean)
+        if(myid==0) write(*,*) 'size(plc_s%prpmean)',size(plc_s%prpmean)
         if(myid==0) write(*,*) 'size(plc_s%pm1src)',size(plc_s%pm1src)
         if(myid==0) write(*,*) 'size(plc_s%pm2src)',size(plc_s%pm2src)
         if(myid==0) write(*,*) 'size(plc_s%pm3src)',size(plc_s%pm3src)
@@ -6425,7 +6435,10 @@ c
       !poly-dispersity
       partcountply = 0.0
       partcountply_t = 0.0
-
+      Tpsumply=0.0
+      Tpsumply_t=0.0
+      radsumply=0.0
+      radsumply_t=0.0
       partTsrcply = 0.0
       partTsrcply_t = 0.0
 c ------------ note set nmatch in sr. iso so that
@@ -7697,12 +7710,14 @@ c
        do icls=1,Nrp    !Loop4: size loop
        iclsg=(icls-1)*pjs
        plstat(iz,iclsg+1)=plstat(iz,iclsg+1)+partcountply(ix,iy,iz,icls)
-       plstat(iz,iclsg+2)=plstat(iz,iclsg+2)+partsrc1ply(ix,iy,iz,icls)
-       plstat(iz,iclsg+3)=plstat(iz,iclsg+3)+partsrc2ply(ix,iy,iz,icls)
-       plstat(iz,iclsg+4)=plstat(iz,iclsg+4)+partsrc3ply(ix,iy,iz,icls)
-       plstat(iz,iclsg+5)=plstat(iz,iclsg+5)+partTsrcply(ix,iy,iz,icls)
-       plstat(iz,iclsg+6)=plstat(iz,iclsg+6)+partHsrcply(ix,iy,iz,icls)
-       plstat(iz,iclsg+7)=plstat(iz,iclsg+7)+partTEsrcply(ix,iy,iz,icls)
+       plstat(iz,iclsg+2)=plstat(iz,iclsg+2)+Tpsumply(ix,iy,iz,icls)
+       plstat(iz,iclsg+3)=plstat(iz,iclsg+3)+radsumply(ix,iy,iz,icls)
+       plstat(iz,iclsg+4)=plstat(iz,iclsg+4)+partsrc1ply(ix,iy,iz,icls)
+       plstat(iz,iclsg+5)=plstat(iz,iclsg+5)+partsrc2ply(ix,iy,iz,icls)
+       plstat(iz,iclsg+6)=plstat(iz,iclsg+6)+partsrc3ply(ix,iy,iz,icls)
+       plstat(iz,iclsg+7)=plstat(iz,iclsg+7)+partTsrcply(ix,iy,iz,icls)
+       plstat(iz,iclsg+8)=plstat(iz,iclsg+8)+partHsrcply(ix,iy,iz,icls)
+       plstat(iz,iclsg+9)=plstat(iz,iclsg+9)+partTEsrcply(ix,iy,iz,icls)
        end do  !End Loop4: size loop
       enddo    !End Loop3: x-loop
       enddo    !End Loop2: y-loop
@@ -7835,6 +7850,8 @@ c
           do iz=1,nnz    !z-loop
           iclsg=(icls-1)*pjs
           pcount(iz,icls)=plstat(iz,iclsg+1)/xl/yl/dzw(iz)
+          pTpmean(iz,icls)=plstat(iz,iclsg+2)/plstat(iz,iclsg+1)
+          prpmean(iz,icls)=plstat(iz,iclsg+3)/plstat(iz,iclsg+1)
           pm1src(iz,icls) =plstat(iz,iclsg+2)*fnxy
           pm2src(iz,icls) =plstat(iz,iclsg+3)*fnxy
           pm3src(iz,icls) =plstat(iz,iclsg+4)*fnxy
@@ -7850,6 +7867,8 @@ c
       write(*,*)'m1src:myid,m1src',myid,iz,m1src
       do icls=1,Nrp
       write(*,*)'pcount:myid,icls,pcount',myid,icls,pcount(:,icls)
+      write(*,*)'pTpmean:myid,icls,pTpmean',myid,icls,pTpmean(:,icls)
+      write(*,*)'prpmean:myid,icls,prpmean',myid,icls,prpmean(:,icls)
       write(*,*)'pm1src:myid,icls,pm1src',myid,icls,pm1src(:,icls)
       end do
       write(*,*) 'zconc: myid,zconc',myid,zconc
@@ -8477,14 +8496,14 @@ c
 c -------------- write profile information
 c
 c     call write_polyprof(pnhisp,plkrec,plisize,plc_s%pcount)
-      call write_polyprof(pnhisp,plkrec,Nrp*nnz,pcount,pm1src,pm1src,
-     +pm2src,pm3src,pTpsrc,pHpsrc,pTEpsrc)
+      call write_polyprof(pnhisp,plkrec,Nrp*nnz,pcount,pTpmean,prpmean,
+     +pm1src,pm2src,pm3src,pTpsrc,pHpsrc,pTEpsrc)
 c
       return
       end subroutine
 
       subroutine write_polyprof(plhispid,plkrec1,num,f1,f2,f3,f4,
-     +f5,f6,f7)
+     +f5,f6,f7,f8,f9)
       use pars
       use particles
       implicit none
@@ -8492,9 +8511,10 @@ c
       integer,intent(in) :: num
       integer :: i
       real f1(num),f2(num),f3(num),f4(num),f5(num),f6(num),f7(num)
+      real f8(num),f9(num)
       real*4 f132(num),f232(num),f332(num)
       real*4 f432(num),f532(num),f632(num)
-      real*4 f732(num)
+      real*4 f732(num),f832(num),f932(num)
 c
 c -------------- build special 32 bit arrays for profiles
 c
@@ -8506,6 +8526,8 @@ c
          f532(i) = f5(i)
          f632(i) = f6(i)
          f732(i) = f7(i)
+         f832(i) = f8(i)
+         f932(i) = f9(i)
       enddo
 c
       if(imndbug==3.or.mod(it,itape)==0.and.myid==0) then
@@ -8516,9 +8538,11 @@ c
       write(*,*) 'plhispid',plhispid,'profile5 passed to write',f532 !test
       write(*,*) 'plhispid',plhispid,'profile6 passed to write',f632 !test
       write(*,*) 'plhispid',plhispid,'profile7 passed to write',f732 !test
+      write(*,*) 'plhispid',plhispid,'profile8 passed to write',f832 !test
+      write(*,*) 'plhispid',plhispid,'profile9 passed to write',f932 !test
       end if
       write(plhispid,err=979,rec=plkrec1)f132,f232,f332,f432,f532,
-     +f632,f732
+     +f632,f732,f832,f932
 c     write(plhispid,err=979,rec=plkrec1) (f132(i),i=1,num),
 c     +(f232(i),i=1,num),
 c     +(f332(i),i=1,num),
@@ -8886,6 +8910,12 @@ c     +         Text(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3))
       
       allocate(partcountply(nnx,iys:iye,izs-1:ize+1,Nrp))
       allocate(partcountply_t(0:nnz+1,iys:iye,mxs:mxe,Nrp))
+
+      allocate(Tpsumply(nnx,iys:iye,izs-1:ize+1,Nrp))
+      allocate(Tpsumply_t(0:nnz+1,iys:iye,mxs:mxe,Nrp))
+
+      allocate(radsumply(nnx,iys:iye,izs-1:ize+1,Nrp))
+      allocate(radsumply_t(0:nnz+1,iys:iye,mxs:mxe,Nrp))
 
       allocate(partsrc1ply(nnx,iys:iye,izs-1:ize+1,Nrp))
       allocate(partsrc1ply_t(0:nnz+1,iys:iye+1,mxs:mxe+1,Nrp))
@@ -10868,7 +10898,14 @@ c
 
       ! poly-dispersity related
       partcountply_t=0.0
-
+      Tpsumply_t=0.0
+      radsumply_t=0.0
+      partsrc1ply_t=0.0
+      partsrc2ply_t=0.0 
+      partsrc3ply_t=0.0 
+      partTsrcply_t=0.0
+      partHsrcply_t=0.0
+      partTEsrcply_t=0.0
       !t_s = mpi_wtime()
 
 
@@ -11166,6 +11203,14 @@ c         pcount = 0
       do icls=1,Nrp
       call ztox_trans(partcountply_t(0:nnz+1,iys:iye,mxs:mxe,icls),
      +       partcountply(1:nnx,iys:iye,izs-1:ize+1,icls),nnx,nnz,mxs,
+     +       mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +       ncpu_s,numprocs)
+      call ztox_trans(Tpsumply_t(0:nnz+1,iys:iye,mxs:mxe,icls),
+     +       Tpsumply(1:nnx,iys:iye,izs-1:ize+1,icls),nnx,nnz,mxs,
+     +       mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +       ncpu_s,numprocs)
+      call ztox_trans(radsumply_t(0:nnz+1,iys:iye,mxs:mxe,icls),
+     +       radsumply(1:nnx,iys:iye,izs-1:ize+1,icls),nnx,nnz,mxs,
      +       mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +       ncpu_s,numprocs)
       call ztox_trans(partsrc1ply_t(0:nnz+1,iys:iye,mxs:mxe,icls),
@@ -13223,10 +13268,7 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
        write(*,*) 'it',it,'detect sz2 @cpu0 pid',part%pidx,part%radius
       end if
       end if
-      ! splitting partcount
-
-      partcountply_t(kpt,jpt,ipt,part%rpind)=
-     + partcountply_t(kpt,jpt,ipt,part%rpind)+1.0
+      !test
       if(imndbug==3.and.mod(it,ihst)==0) then
       if(kpt>120) then
       write(*,*) 'myid,partcountply_t',myid,partcountply(kpt,jpt,ipt,:)
@@ -13263,8 +13305,15 @@ c     ======== ASSIGN HISTOGRAM BINS ======= !Tianze 09/02/16
 
       qstarsum_t(kpt,jpt,ipt) = qstarsum_t(kpt,jpt,ipt) + part%qstar
 
+      !poly-dispersed
 
-
+      ! splitting partcount
+      partcountply_t(kpt,jpt,ipt,part%rpind)=
+     + partcountply_t(kpt,jpt,ipt,part%rpind)+1.0
+      Tpsumply_t(kpt,jpt,ipt,part%rpind) =
+     + Tpsumply_t(kpt,jpt,ipt,part%rpind) + part%Tp
+      radsumply_t(kpt,jpt,ipt,part%rpind) = 
+     + radsumply_t(kpt,jpt,ipt,part%rpind) + part%radius
       end subroutine particle_stats
 
       subroutine particle_coupling_update
