@@ -7852,12 +7852,12 @@ c
           pcount(iz,icls)=plstat(iz,iclsg+1)/xl/yl/dzw(iz)
           pTpmean(iz,icls)=plstat(iz,iclsg+2)/plstat(iz,iclsg+1)
           prpmean(iz,icls)=plstat(iz,iclsg+3)/plstat(iz,iclsg+1)
-          pm1src(iz,icls) =plstat(iz,iclsg+2)*fnxy
-          pm2src(iz,icls) =plstat(iz,iclsg+3)*fnxy
-          pm3src(iz,icls) =plstat(iz,iclsg+4)*fnxy
-          pTpsrc(iz,icls)=plstat(iz,iclsg+5)*fnxy
-          pHpsrc(iz,icls)=plstat(iz,iclsg+6)*fnxy
-          pTEpsrc(iz,icls)=plstat(iz,iclsg+7)*fnxy
+          pm1src(iz,icls) =plstat(iz,iclsg+4)*fnxy
+          pm2src(iz,icls) =plstat(iz,iclsg+5)*fnxy
+          pm3src(iz,icls) =plstat(iz,iclsg+6)*fnxy
+          pTpsrc(iz,icls)=plstat(iz,iclsg+7)*fnxy
+          pHpsrc(iz,icls)=plstat(iz,iclsg+8)*fnxy
+          pTEpsrc(iz,icls)=plstat(iz,iclsg+9)*fnxy
           end do
       end do
 
