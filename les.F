@@ -785,12 +785,6 @@ c ---- Read the input file for all necessary parameters
 c ----define time constants
         
       ihstape=itape/ihst
-      itlocal=mod(it,itape)
-      ithl=int(itlocal/ihst)
-      if (ithl==0.and.it.ne.0)then
-         ithl=ihstape
-      end if
-      if(itlocal==0) itlocal = itape
 !-c
 c -------- set number of x-y slab cpus
 c
@@ -869,6 +863,13 @@ c !save file first at itape, then particle_rk3
       if (myid==0) then
       write(*,*) 'it,time = ',it,time
       end if
+
+      itlocal=mod(it,itape)
+      ithl=int(itlocal/ihst)
+      if (ithl==0.and.it.ne.0)then
+         ithl=ihstape
+      end if
+      if(itlocal==0) itlocal = itape
 
       call record_timestamp(time)
       if (ispray==1) then
